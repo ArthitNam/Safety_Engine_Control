@@ -3,7 +3,7 @@
    By Arthit_N ... Tel.0959058972  E-Mail:tgbroadcast@gmail.com
    Kickoff 26/01/2022
    Ver.  0.9.0
-   put on github ..
+   put on github 26/01/2022
 */
 #include <Arduino.h>
 #include <Wire.h>
