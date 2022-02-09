@@ -12,6 +12,7 @@
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
+#define SILENCE_ALARM 9
 #define TEST_PIN 10
 #define ARMED_PIN 11
 
@@ -25,6 +26,10 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // virtuabotixRTC myRTC(7, 6, 5); //  Pin RTC (CLK,DAT,RST)
 
 unsigned long previousMillis = 0;
+unsigned long last1 = 0, last2 = 0, last3 = 0;
+unsigned long waterTankFalut_verify = 15000;
+unsigned long coolingfalut_verify = 5000;
+unsigned long coolingfalut_delay = 20000;
 
 bool goodDateTime;
 bool testSw = false;
@@ -37,6 +42,7 @@ bool warning = false;
 bool cooling_falut = false;
 
 bool showDisplay = false;
+bool silence_alarm = false;
 int page = 1;
 float temp = 35.0;
 
@@ -107,7 +113,7 @@ void startTone()
 
 void beep()
 {
-  tone(BUZZER_PIN, 523, 200);
+  tone(BUZZER_PIN, 523, 0);
   delay(100);
   noTone(BUZZER_PIN);
   delay(100);
@@ -139,6 +145,7 @@ void setup()
   pinMode(FLOW_SW, INPUT_PULLUP);
   pinMode(OIL_PRES_SW, INPUT_PULLUP);
   pinMode(WATER_TANK, INPUT_PULLUP);
+  pinMode(SILENCE_ALARM, INPUT_PULLUP);
 
   pinMode(LED_YELLOW, OUTPUT);
   pinMode(LED_RED, OUTPUT);
@@ -166,16 +173,27 @@ void setup()
   // readDateTime();
 }
 
+void silenceAlarmReset()
+{
+  bool newsilenceAlarm = false;
+  if (newsilenceAlarm != silence_alarm)
+  {
+    silence_alarm = newsilenceAlarm;
+  }
+}
 void buzzerAlarm()
 {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= 500)
+  if (silence_alarm == false)
   {
-    noTone(BUZZER_PIN);
-    if (currentMillis - previousMillis >= 1000)
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= 500)
     {
-      tone(BUZZER_PIN, 800, 0);
-      previousMillis = currentMillis;
+      noTone(BUZZER_PIN);
+      if (currentMillis - previousMillis >= 1000)
+      {
+        tone(BUZZER_PIN, 800, 0);
+        previousMillis = currentMillis;
+      }
     }
   }
 }
@@ -183,15 +201,17 @@ void cooling_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
   buzzerAlarm();
-  // if (showDisplay == true)
-  // {
-  //   lcd.clear();
-  //   lcd.setCursor(0, 1);
-  //   lcd.print("   !! WARNING !!    ");
-  //   lcd.setCursor(0, 2);
-  //   lcd.print("COOLING SYSTEM FALUT");
-  //   showDisplay = false;
-  // }
+  if (showDisplay == true && silence_alarm == false)
+  {
+    silenceAlarmReset();
+
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("   !! WARNING !!    ");
+    lcd.setCursor(0, 2);
+    lcd.print("COOLING SYSTEM FALUT");
+    showDisplay = false;
+  }
 }
 void disable_fault()
 {
@@ -199,6 +219,8 @@ void disable_fault()
   buzzerAlarm();
   if (showDisplay == true)
   {
+    silenceAlarmReset();
+
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
@@ -215,12 +237,18 @@ void readWaterTank()
     bool newWaterTank = true;
     if (newWaterTank != waterTank)
     {
-      waterTank = newWaterTank;
-      showDisplay = true;
+      last1++;
+      Serial.println(last1);
+      if (last1 >= waterTankFalut_verify)
+      {
+        waterTank = newWaterTank;
+        showDisplay = true;
+      }
     }
   }
   if (digitalRead(WATER_TANK) == HIGH)
   {
+    last1 = 0;
     bool newWaterTank = false;
     if (newWaterTank != waterTank)
     {
@@ -353,7 +381,7 @@ void page1()
       lcd.print("NORMAL");
       cooling_falut = false;
     }
-    if (coolSys == false&&oilPress==false)
+    if (coolSys == false)
     {
       lcd.setCursor(14, 2);
       lcd.print("LOW");
@@ -364,8 +392,6 @@ void page1()
       lcd.setCursor(14, 2);
       lcd.print("FAULT");
     }
-    
-    
 
     showDisplay = false;
   }
@@ -378,6 +404,7 @@ void waterTank_fault()
   if (showDisplay == true)
   {
     // Serial.println("Water Tank Low");
+    silenceAlarmReset();
 
     lcd.clear();
     lcd.setCursor(0, 1);
@@ -423,10 +450,49 @@ void loop()
   }
   if (coolSys == false && oilPress == true)
   {
-    cooling_falut = true;
-    cooling_fault();
+    last3++;
+    Serial.println(last3);
+    if (last3 >= coolingfalut_delay)
+    {
+      last2++;
+      Serial.println(last2);
+      if (last2 >= coolingfalut_verify)
+      {
+
+        bool newCoolingFault = true;
+        if (newCoolingFault != cooling_falut)
+        {
+
+          cooling_falut = newCoolingFault;
+          showDisplay = true;
+          page = 0;
+          cooling_fault();
+        }
+      }
+    }
   }
-  if (waterTank != true && armedSw != false && cooling_falut!=true)
+  if (coolSys == true)
+  {
+    last2 = 0;
+    last3 = 0;
+    cooling_falut = false;
+
+    showDisplay = true;
+    page = 1;
+  }
+
+  if (digitalRead(SILENCE_ALARM) == LOW)
+  {
+    silence_alarm = true;
+    noTone(BUZZER_PIN);
+    showDisplay = true;
+    page = 1;
+    last1 = 0;
+    // last2 = 0;
+    // last3 = 0;
+  }
+
+  if (waterTank != true && armedSw != false && cooling_falut != true)
   {
     noTone(BUZZER_PIN);
     page = 1;
