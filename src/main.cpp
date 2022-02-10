@@ -29,7 +29,7 @@ unsigned long previousMillis = 0;
 unsigned long last1 = 0, last2 = 0, last3 = 0;
 unsigned long waterTankFalut_verify = 15000;
 unsigned long coolingfalut_verify = 5000;
-unsigned long coolingfalut_delay = 20000;
+unsigned long coolingfalut_delay = 3000;
 
 bool goodDateTime;
 bool testSw = false;
@@ -40,6 +40,8 @@ bool oilPress = false;
 bool waterTank = false;
 bool warning = false;
 bool cooling_falut = false;
+bool cooling_fault_delay_start = false;
+bool cooling_fault_verify_start = false;
 
 bool showDisplay = false;
 bool silence_alarm = false;
@@ -450,35 +452,55 @@ void loop()
   }
   if (coolSys == false && oilPress == true)
   {
-    last3++;
-    Serial.println(last3);
-    if (last3 >= coolingfalut_delay)
+    if (cooling_fault_delay_start == false)
     {
-      last2++;
-      Serial.println(last2);
-      if (last2 >= coolingfalut_verify)
-      {
+      last2 = millis();
+      cooling_fault_delay_start = true;
+    }
+    if (cooling_fault_delay_start == true && millis() - last2 < coolingfalut_delay)
+    {
+      Serial.print("Start Delay Cooling-Fault  ");
+      Serial.println((millis() - last2) / 1000);
+    }
 
+    if (millis() - last2 > coolingfalut_delay)
+    {
+      if (cooling_fault_verify_start == false)
+      {
+        last3 = millis();
+        cooling_fault_verify_start = true;
+      }
+      if (cooling_fault_verify_start == true && millis() - last3 < coolingfalut_verify)
+      {
+        Serial.print("Start verify Cooling-Fault  ");
+        Serial.println((millis() - last3) / 1000);
+      }
+      if (millis() - last3 >= coolingfalut_verify)
+      {
+        cooling_fault();
         bool newCoolingFault = true;
         if (newCoolingFault != cooling_falut)
         {
-
+          Serial.println("Cooling System Fault !");
           cooling_falut = newCoolingFault;
           showDisplay = true;
           page = 0;
-          cooling_fault();
         }
       }
     }
   }
-  if (coolSys == true)
+  if (coolSys == false && oilPress == false && cooling_fault_delay_start == true)
   {
     last2 = 0;
     last3 = 0;
     cooling_falut = false;
+    cooling_fault_verify_start = false;
+    silence_alarm = false;
 
     showDisplay = true;
     page = 1;
+    cooling_fault_delay_start = false;
+    Serial.println("coolSys true");
   }
 
   if (digitalRead(SILENCE_ALARM) == LOW)
@@ -487,9 +509,13 @@ void loop()
     noTone(BUZZER_PIN);
     showDisplay = true;
     page = 1;
-    last1 = 0;
+
+    delay(200);
+    // last1 = 0;
     // last2 = 0;
     // last3 = 0;
+
+    //cooling_fault_verify_start = false;
   }
 
   if (waterTank != true && armedSw != false && cooling_falut != true)
