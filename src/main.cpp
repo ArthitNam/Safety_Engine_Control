@@ -5,11 +5,15 @@
    Ver.  0.9.0
    put on github 26/01/2022
 */
+
+//**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 4(CS pin can be changed) and pin #52(SS)must be an output
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <RTClib.h>
 #include <SPI.h>
+#include <SD.h>
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
@@ -29,15 +33,19 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 #define MODE_BUTTON 40
 
 unsigned long previousMillis = 0;
-unsigned long last1 = 0, last2 = 0, last3 = 0;
+unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5,last6;
 unsigned long waterTankFalut_verify = 15000;
 unsigned long coolingfalut_verify = 5000;
 unsigned long coolingfalut_delay = 3000;
+unsigned long dimTime = 30000;
+unsigned long engineRunTime;
+unsigned long eneineRunAll;
 
 bool goodDateTime;
 bool testSw = false;
 bool armedSw = false;
 bool engineRun = false;
+bool engineStart = false;
 bool coolSys = false;
 bool oilPress = false;
 bool waterTank = false;
@@ -47,6 +55,7 @@ bool cooling_fault_delay_start = false;
 bool cooling_fault_verify_start = false;
 
 bool showDisplay = false;
+bool displayDim = false;
 bool silence_alarm = false;
 int page = 1;
 float temp = 35.0;
@@ -55,6 +64,109 @@ int buttonState = 1;
 
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
+File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
+const int chipSelect = 53;
+
+void writeDataLoger(String event)
+{
+  myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์ที่ชื่อ test.txt เพื่อเขียนข้อมูล โหมด FILE_WRITE
+
+  // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
+  if (myFile)
+  {
+    DateTime now = rtc.now();
+
+    Serial.print("Writing to SD Card ");
+    myFile.print(event); // สั่งให้เขียนข้อมูล
+    myFile.print(now.day());
+    myFile.print("-");
+    myFile.print(now.month());
+    myFile.print("-");
+    myFile.print(now.year());
+    myFile.print(", ");
+    myFile.print(now.hour());
+    myFile.print(":");
+    myFile.print(now.minute());
+    myFile.print(":");
+    myFile.println(now.second());
+
+    myFile.close(); // ปิดไฟล์
+    Serial.println("done.");
+  }
+  else
+  {
+    // ถ้าเปิดไฟลืไม่สำเร็จ ให้แสดง error
+    Serial.println("error opening File");
+  }
+}
+void verifySD()
+{
+  pinMode(SS, OUTPUT);
+  Serial.print("Initializing SD card...");
+
+  if (!SD.begin(chipSelect))
+  {
+    Serial.println("initialization failed!");
+    lcd.setCursor(0, 2); //
+    lcd.print("  SD Card Failed!   ");
+    return;
+  }
+  Serial.println("initialization done.");
+  lcd.setCursor(0, 2); //
+  lcd.print("   SD Card is OK    ");
+  delay(1000);
+
+  myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์ที่ชื่อ test.txt เพื่อเขียนข้อมูล โหมด FILE_WRITE
+
+  // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
+  if (myFile)
+  {
+    DateTime now = rtc.now();
+
+    Serial.print("Writing to SD Card ");
+    myFile.print("Power ON, "); // สั่งให้เขียนข้อมูล
+    myFile.print(now.day());
+    myFile.print("-");
+    myFile.print(now.month());
+    myFile.print("-");
+    myFile.print(now.year());
+    myFile.print(", ");
+    myFile.print(now.hour());
+    myFile.print(":");
+    myFile.print(now.minute());
+    myFile.print(":");
+    myFile.println(now.second());
+
+    myFile.close(); // ปิดไฟล์
+    Serial.println("done.");
+  }
+  else
+  {
+    // ถ้าเปิดไฟลืไม่สำเร็จ ให้แสดง error
+    Serial.println("error opening File");
+  }
+
+  // เปิดไฟล์เพื่ออ่าน
+  myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
+  if (myFile)
+  {
+    Serial.println("---------------------------------");
+    Serial.println("Read All DataLoger From SD Card..");
+    // อ่านข้อมูลทั้งหมดออกมา
+    while (myFile.available())
+    {
+      Serial.write(myFile.read());
+    }
+    myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+    Serial.println("---------------------------------");
+  }
+  else
+  {
+    // ถ้าอ่านไม่สำเร็จ ให้แสดง error
+    Serial.println("error opening SD Card");
+  }
+}
 
 void readDateTime()
 {
@@ -105,6 +217,15 @@ void beep()
   delay(100);
 }
 
+void displayOff()
+{
+  lcd.noBacklight();
+}
+void displayOn()
+{
+  lcd.backlight();
+}
+
 void showTimeNow()
 {
   DateTime now = rtc.now();
@@ -121,7 +242,6 @@ void showTimeNow()
   Serial.print(now.minute());
   Serial.print(":");
   Serial.println(now.second());
-
 }
 
 void setup()
@@ -139,11 +259,10 @@ void setup()
   lcd.setCursor(0, 1); //
   lcd.print("SafetyEngine Control");
   lcd.setCursor(0, 2); //
-  lcd.print("  Starting Systems  ");
+  lcd.print(" Verifying Systems  ");
   lcd.setCursor(0, 3); //
   lcd.print("--------------------");
   // delay(1000);
-  //  lcd.noBacklight();
 
   pinMode(TEST_PIN, INPUT_PULLUP);
   pinMode(ARMED_PIN, INPUT_PULLUP);
@@ -159,6 +278,9 @@ void setup()
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DOWN_BUTTON, INPUT_PULLUP);
   pinMode(MODE_BUTTON, INPUT_PULLUP);
+
+  pinMode(chipSelect, OUTPUT);
+  // pinMode(52, OUTPUT);
 
   digitalWrite(LED_YELLOW, HIGH);
   digitalWrite(LED_RED, HIGH);
@@ -191,6 +313,8 @@ void setup()
   }
   // rtc.adjust(DateTime(__DATE__, __TIME__));
   showTimeNow();
+
+  verifySD();
 
   beep();
   delay(200);
@@ -237,6 +361,7 @@ void cooling_fault()
     lcd.setCursor(0, 2);
     lcd.print("COOLING SYSTEM FALUT");
     showDisplay = false;
+    writeDataLoger("Cooling System Fault, ");
   }
 }
 void disable_fault()
@@ -253,6 +378,7 @@ void disable_fault()
     lcd.setCursor(0, 2);
     lcd.print("  SHUTOFF DISABLE   ");
     showDisplay = false;
+    writeDataLoger("SHUTOFF DISABLE, ");
   }
 }
 
@@ -392,6 +518,11 @@ void page1()
       lcd.print("RUN");
       lcd.setCursor(14, 1);
       lcd.print("NORMAL");
+      if (engineRun == false)
+      {
+        engineRun = true;
+        writeDataLoger("Engine Run, ");
+      }
     }
     if (oilPress == false)
     {
@@ -399,6 +530,11 @@ void page1()
       lcd.print("STOP");
       lcd.setCursor(14, 1);
       lcd.print("LOW");
+      if (engineRun == true)
+      {
+        engineRun = false;
+        writeDataLoger("Engine Stop, ");
+      }
     }
 
     if (coolSys == true)
@@ -420,6 +556,12 @@ void page1()
     }
 
     showDisplay = false;
+  }
+  if (displayDim == false && millis() - last4 >= dimTime)
+  {
+    displayOff();
+    displayDim = true;
+    last4 = millis();
   }
 }
 void page2()
@@ -447,7 +589,7 @@ void page2()
 
     showDisplay = false;
   }
-  if (waterTank==false)
+  if (waterTank == false)
   {
     lcd.setCursor(12, 0);
     lcd.print("NORMAL");
@@ -465,7 +607,7 @@ void page2()
   }
   lcd.print(now.hour());
   lcd.print(":");
-  if (now.minute()<10)
+  if (now.minute() < 10)
   {
     lcd.print("0");
   }
@@ -493,6 +635,7 @@ void waterTank_fault()
     lcd.setCursor(0, 2);
     lcd.print("  WATER TANK : LOW  ");
     showDisplay = false;
+    writeDataLoger("Water tank low, ");
   }
 }
 
@@ -508,7 +651,6 @@ void readTemp()
 
 void loop()
 {
-  
 
   readTemp();
   readWaterTank();
@@ -516,6 +658,26 @@ void loop()
   readFlowSw();
   readTestSw();
   readArmedSw();
+
+  if (engineRun == true)
+  {
+    if (engineStart == false)
+    {
+      last5 = millis();
+      last6 = millis();
+      engineStart = true;
+    }
+    engineRunTime = engineRunTime + (millis() - last5);
+    engineRunTime = engineRunTime / 1000;
+    eneineRunAll = eneineRunAll + engineRunTime;
+    Serial.println(engineRunTime);
+    Serial.println(eneineRunAll);
+  }
+  if (engineRun==false)
+  {
+    engineStart = false;
+  }
+  
 
   if (waterTank == true)
   {
@@ -586,7 +748,7 @@ void loop()
     noTone(BUZZER_PIN);
     showDisplay = true;
     page = 1;
-
+    writeDataLoger("silence Alarm, ");
     delay(200);
   }
 
@@ -595,7 +757,7 @@ void loop()
     noTone(BUZZER_PIN);
     page = 1;
   }
-  if (digitalRead(UP_BUTTON) == LOW)
+  if (digitalRead(UP_BUTTON) == LOW && displayDim == false)
   {
     buttonState++;
     if (buttonState > 2)
@@ -606,7 +768,7 @@ void loop()
     showDisplay = true;
     delay(200);
   }
-  if (digitalRead(DOWN_BUTTON) == LOW)
+  if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
   {
     buttonState--;
     if (buttonState < 1)
@@ -617,7 +779,7 @@ void loop()
     Serial.println(buttonState);
     delay(200);
   }
-  if (page == 1 && buttonState == 1)
+  if (page == 1 && buttonState == 1 && displayDim == false)
   {
     page1();
   }
@@ -625,5 +787,16 @@ void loop()
   {
     page = 2;
     page2();
+  }
+
+  if (digitalRead(UP_BUTTON) == LOW || digitalRead(DOWN_BUTTON) == LOW || digitalRead(MODE_BUTTON) == LOW || showDisplay == true)
+  {
+    last4 = millis();
+    if (displayDim == true)
+    {
+      displayOn();
+      displayDim = false;
+      delay(200);
+    }
   }
 }
