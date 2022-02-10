@@ -6,9 +6,10 @@
    put on github 26/01/2022
 */
 #include <Arduino.h>
-//#include <virtuabotixRTC.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <RTClib.h>
+#include <SPI.h>
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
@@ -23,7 +24,9 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 #define OIL_PRES_SW 19
 #define WATER_TANK 12
 
-// virtuabotixRTC myRTC(7, 6, 5); //  Pin RTC (CLK,DAT,RST)
+#define UP_BUTTON 38
+#define DOWN_BUTTON 39
+#define MODE_BUTTON 40
 
 unsigned long previousMillis = 0;
 unsigned long last1 = 0, last2 = 0, last3 = 0;
@@ -48,32 +51,13 @@ bool silence_alarm = false;
 int page = 1;
 float temp = 35.0;
 
+int buttonState = 1;
+
+RTC_DS3231 rtc;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
 void readDateTime()
 {
-  // myRTC.updateTime();
-  // Serial.println("------------------------------------------------");
-  // if (myRTC.year < 2021 || myRTC.year > 2052)
-  // {
-  //   goodDateTime = false;
-  //   Serial.println("Date Time Fault");
-  // }
-  // else
-  // {
-  //   goodDateTime = true;
-  //   Serial.println("Date Time is OK");
-  // }
-  // Serial.print("Current Date / Time: ");
-  // Serial.print(myRTC.dayofmonth);
-  // Serial.print(" / ");
-  // Serial.print(myRTC.month);
-  // Serial.print(" / ");
-  // Serial.print(myRTC.year);
-  // Serial.print("  ");
-  // Serial.print(myRTC.hours);
-  // Serial.print(": ");
-  // Serial.print(myRTC.minutes);
-  // Serial.print(": ");
-  // Serial.println(myRTC.seconds);
 }
 
 void startTone()
@@ -121,6 +105,25 @@ void beep()
   delay(100);
 }
 
+void showTimeNow()
+{
+  DateTime now = rtc.now();
+
+  Serial.println(daysOfTheWeek[now.dayOfTheWeek()]);
+  Serial.print(now.day());
+  Serial.print("-");
+  Serial.print(now.month());
+  Serial.print("-");
+  Serial.println(now.year());
+
+  Serial.print(now.hour());
+  Serial.print(":");
+  Serial.print(now.minute());
+  Serial.print(":");
+  Serial.println(now.second());
+
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -136,7 +139,7 @@ void setup()
   lcd.setCursor(0, 1); //
   lcd.print("SafetyEngine Control");
   lcd.setCursor(0, 2); //
-  lcd.print("  Date-Time is OK   ");
+  lcd.print("  Starting Systems  ");
   lcd.setCursor(0, 3); //
   lcd.print("--------------------");
   // delay(1000);
@@ -153,6 +156,10 @@ void setup()
   pinMode(LED_RED, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
 
+  pinMode(UP_BUTTON, INPUT_PULLUP);
+  pinMode(DOWN_BUTTON, INPUT_PULLUP);
+  pinMode(MODE_BUTTON, INPUT_PULLUP);
+
   digitalWrite(LED_YELLOW, HIGH);
   digitalWrite(LED_RED, HIGH);
   delay(500);
@@ -165,14 +172,31 @@ void setup()
   digitalWrite(LED_YELLOW, LOW);
   digitalWrite(LED_RED, LOW);
 
+  if (!rtc.begin())
+  {
+    lcd.setCursor(0, 2); //
+    lcd.print(" Couldn't find RTC  ");
+
+    Serial.println("Couldn't find RTC");
+    while (1)
+      ;
+  }
+  else
+  {
+    lcd.setCursor(0, 2); //
+    lcd.print("  Date Time is OK   ");
+
+    Serial.println("Date Time is OK");
+    delay(1000);
+  }
+  // rtc.adjust(DateTime(__DATE__, __TIME__));
+  showTimeNow();
+
   beep();
   delay(200);
   // startTone();
   lcd.clear();
   showDisplay = true;
-  // seconds, minutes, hours, day of the week, day of the month, month, year  //  Set วันเวลา RTC
-  // myRTC.setDS1302Time(0, 20, 11, 3, 26, 1, 2022);                          //  Set วันเวลา RTC
-  // readDateTime();
 }
 
 void silenceAlarmReset()
@@ -398,6 +422,61 @@ void page1()
     showDisplay = false;
   }
 }
+void page2()
+{
+  DateTime now = rtc.now();
+
+  if (showDisplay == true)
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("WATER TANK :");
+    lcd.setCursor(0, 1);
+    lcd.print("DATE :");
+    lcd.setCursor(6, 1);
+    lcd.print(now.day());
+    lcd.print("-");
+    lcd.print(now.month());
+    lcd.print("-");
+    lcd.print(now.year());
+
+    lcd.setCursor(0, 2);
+    lcd.print("TIME :");
+    lcd.setCursor(0, 3);
+    lcd.print("ENGINE RUN :");
+
+    showDisplay = false;
+  }
+  if (waterTank==false)
+  {
+    lcd.setCursor(12, 0);
+    lcd.print("NORMAL");
+  }
+  if (waterTank == true)
+  {
+    lcd.setCursor(12, 0);
+    lcd.print("LOW   ");
+  }
+
+  lcd.setCursor(6, 2);
+  if (now.hour() < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(now.hour());
+  lcd.print(":");
+  if (now.minute()<10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(now.minute());
+  lcd.print(":");
+  if (now.second() < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(now.second());
+}
 
 void waterTank_fault()
 {
@@ -429,10 +508,8 @@ void readTemp()
 
 void loop()
 {
-  if (page == 1)
-  {
-    page1();
-  }
+  
+
   readTemp();
   readWaterTank();
   readOilPressSw();
@@ -511,16 +588,42 @@ void loop()
     page = 1;
 
     delay(200);
-    // last1 = 0;
-    // last2 = 0;
-    // last3 = 0;
-
-    //cooling_fault_verify_start = false;
   }
 
   if (waterTank != true && armedSw != false && cooling_falut != true)
   {
     noTone(BUZZER_PIN);
     page = 1;
+  }
+  if (digitalRead(UP_BUTTON) == LOW)
+  {
+    buttonState++;
+    if (buttonState > 2)
+    {
+      buttonState = 1;
+    }
+    Serial.println(buttonState);
+    showDisplay = true;
+    delay(200);
+  }
+  if (digitalRead(DOWN_BUTTON) == LOW)
+  {
+    buttonState--;
+    if (buttonState < 1)
+    {
+      buttonState = 2;
+    }
+    showDisplay = true;
+    Serial.println(buttonState);
+    delay(200);
+  }
+  if (page == 1 && buttonState == 1)
+  {
+    page1();
+  }
+  if (buttonState == 2)
+  {
+    page = 2;
+    page2();
   }
 }
