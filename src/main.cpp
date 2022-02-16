@@ -9,11 +9,14 @@
 //**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 4(CS pin can be changed) and pin #52(SS)must be an output
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <RTClib.h>
 #include <SPI.h>
 #include <SD.h>
+#include <stdio.h>
+#include <string.h>
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
@@ -33,13 +36,20 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 #define MODE_BUTTON 40
 
 unsigned long previousMillis = 0;
-unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5,last6;
+unsigned long previousMillis1 = 0;
+
+unsigned long currentMillis;
+unsigned long currentMillis1;
+unsigned long countSec;
+
+unsigned long last1 = 0,
+              last2 = 0, last3 = 0, last4 = 0, last5, last6;
 unsigned long waterTankFalut_verify = 15000;
 unsigned long coolingfalut_verify = 5000;
 unsigned long coolingfalut_delay = 3000;
 unsigned long dimTime = 30000;
+unsigned long pageOtherTime = 30000;
 unsigned long engineRunTime;
-unsigned long eneineRunAll;
 
 bool goodDateTime;
 bool testSw = false;
@@ -59,11 +69,52 @@ bool displayDim = false;
 bool silence_alarm = false;
 int page = 1;
 float temp = 35.0;
-
+int historyCount = 0;
+int historyLine = 1;
+String buffer;
+bool read = false;
+unsigned long position[1000];
+int count = 0;
 int buttonState = 1;
 
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+byte engineChar0[8] = {
+    B01111,
+    B00011,
+    B10100,
+    B10100,
+    B11100,
+    B10110,
+    B10010,
+    B00011};
+byte engineChar1[8] = {
+    B11000,
+    B01011,
+    B00101,
+    B00001,
+    B00001,
+    B00101,
+    B01011,
+    B10000};
+byte upChar[8] = {
+    B00100,
+    B01110,
+    B11111,
+    B11111,
+    B01110,
+    B01110,
+    B01110,
+    B01110};
+byte downChar[8] = {
+    B01110,
+    B01110,
+    B01110,
+    B01110,
+    B11111,
+    B11111,
+    B01110,
+    B00100};
 
 File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
 const int chipSelect = 53;
@@ -81,14 +132,26 @@ void writeDataLoger(String event)
     myFile.print(event); // สั่งให้เขียนข้อมูล
     myFile.print(now.day());
     myFile.print("-");
+    if (now.month()<10)
+    {
+      myFile.print("0");
+    }
     myFile.print(now.month());
     myFile.print("-");
     myFile.print(now.year());
-    myFile.print(", ");
+    myFile.print(" ");
     myFile.print(now.hour());
     myFile.print(":");
+    if (now.minute() < 10)
+    {
+      myFile.print("0");
+    }
     myFile.print(now.minute());
     myFile.print(":");
+    if (now.second() < 10)
+    {
+      myFile.print("0");
+    }
     myFile.println(now.second());
 
     myFile.close(); // ปิดไฟล์
@@ -98,6 +161,34 @@ void writeDataLoger(String event)
   {
     // ถ้าเปิดไฟลืไม่สำเร็จ ให้แสดง error
     Serial.println("error opening File");
+  }
+  // เปิดไฟล์เพื่ออ่าน
+  myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
+  if (myFile)
+  {
+    historyCount = 0;
+    Serial.println("---------------------------------");
+    Serial.println("Read All DataLoger From SD Card..");
+    // อ่านข้อมูลทั้งหมดออกมา
+    while (myFile.available())
+    {
+      // Serial.write(myFile.read());
+      historyCount++;
+      Serial.print(historyCount);
+      Serial.print(" ");
+      buffer = myFile.readStringUntil('\n');
+
+      Serial.println(buffer); // Printing for debugging purpose
+    }
+    myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+    Serial.print("History Count = ");
+    Serial.println(historyCount);
+    Serial.println("---------------------------------");
+  }
+  else
+  {
+    // ถ้าอ่านไม่สำเร็จ ให้แสดง error
+    Serial.println("error opening SD Card");
   }
 }
 void verifySD()
@@ -117,6 +208,8 @@ void verifySD()
   lcd.print("   SD Card is OK    ");
   delay(1000);
 
+  //SD.remove("data.txt");
+
   myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์ที่ชื่อ test.txt เพื่อเขียนข้อมูล โหมด FILE_WRITE
 
   // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
@@ -125,17 +218,29 @@ void verifySD()
     DateTime now = rtc.now();
 
     Serial.print("Writing to SD Card ");
-    myFile.print("Power ON, "); // สั่งให้เขียนข้อมูล
+    myFile.print("Power On,"); // สั่งให้เขียนข้อมูล
     myFile.print(now.day());
     myFile.print("-");
+    if (now.month() < 10)
+    {
+      myFile.print("0");
+    }
     myFile.print(now.month());
     myFile.print("-");
     myFile.print(now.year());
-    myFile.print(", ");
+    myFile.print(" ");
     myFile.print(now.hour());
     myFile.print(":");
+    if (now.minute() < 10)
+    {
+      myFile.print("0");
+    }
     myFile.print(now.minute());
     myFile.print(":");
+    if (now.second() < 10)
+    {
+      myFile.print("0");
+    }
     myFile.println(now.second());
 
     myFile.close(); // ปิดไฟล์
@@ -151,14 +256,23 @@ void verifySD()
   myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
   if (myFile)
   {
+
     Serial.println("---------------------------------");
     Serial.println("Read All DataLoger From SD Card..");
     // อ่านข้อมูลทั้งหมดออกมา
     while (myFile.available())
     {
-      Serial.write(myFile.read());
+      // Serial.write(myFile.read());
+      historyCount++;
+      Serial.print(historyCount);
+      Serial.print(" ");
+      buffer = myFile.readStringUntil('\n');
+
+      Serial.println(buffer); // Printing for debugging purpose
     }
     myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+    Serial.print("History Count = ");
+    Serial.println(historyCount);
     Serial.println("---------------------------------");
   }
   else
@@ -167,9 +281,17 @@ void verifySD()
     Serial.println("error opening SD Card");
   }
 }
-
-void readDateTime()
+void readEeprom()
 {
+  EEPROM.begin();
+  engineRunTime = EEPROM.read(0);
+
+  if (engineRunTime < 0 || engineRunTime > 4294967294)
+  {
+    engineRunTime = 0;
+  }
+  Serial.print("EngineRunTime = ");
+  Serial.println(engineRunTime);
 }
 
 void startTone()
@@ -219,11 +341,13 @@ void beep()
 
 void displayOff()
 {
+  lcd.noDisplay();
   lcd.noBacklight();
 }
 void displayOn()
 {
   lcd.backlight();
+  lcd.display();
 }
 
 void showTimeNow()
@@ -252,6 +376,11 @@ void setup()
   Serial.println("Ver.  0.9.0");
 
   lcd.init(); // initialize the lcd
+  lcd.createChar(0, engineChar0);
+  lcd.createChar(1, engineChar1);
+  lcd.createChar(2, upChar);
+  lcd.createChar(3, downChar);
+
   lcd.backlight();
   lcd.clear();
   lcd.setCursor(0, 0); //
@@ -278,9 +407,7 @@ void setup()
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DOWN_BUTTON, INPUT_PULLUP);
   pinMode(MODE_BUTTON, INPUT_PULLUP);
-
   pinMode(chipSelect, OUTPUT);
-  // pinMode(52, OUTPUT);
 
   digitalWrite(LED_YELLOW, HIGH);
   digitalWrite(LED_RED, HIGH);
@@ -293,6 +420,8 @@ void setup()
   delay(500);
   digitalWrite(LED_YELLOW, LOW);
   digitalWrite(LED_RED, LOW);
+
+  readEeprom();
 
   if (!rtc.begin())
   {
@@ -361,7 +490,7 @@ void cooling_fault()
     lcd.setCursor(0, 2);
     lcd.print("COOLING SYSTEM FALUT");
     showDisplay = false;
-    writeDataLoger("Cooling System Fault, ");
+    writeDataLoger("Cooling System Fault,");
   }
 }
 void disable_fault()
@@ -378,7 +507,7 @@ void disable_fault()
     lcd.setCursor(0, 2);
     lcd.print("  SHUTOFF DISABLE   ");
     showDisplay = false;
-    writeDataLoger("SHUTOFF DISABLE, ");
+    writeDataLoger("SHUTOFF DISABLE,");
   }
 }
 
@@ -521,7 +650,7 @@ void page1()
       if (engineRun == false)
       {
         engineRun = true;
-        writeDataLoger("Engine Run, ");
+        writeDataLoger("Engine Run,");
       }
     }
     if (oilPress == false)
@@ -533,7 +662,7 @@ void page1()
       if (engineRun == true)
       {
         engineRun = false;
-        writeDataLoger("Engine Stop, ");
+        writeDataLoger("Engine Stop,");
       }
     }
 
@@ -578,6 +707,10 @@ void page2()
     lcd.setCursor(6, 1);
     lcd.print(now.day());
     lcd.print("-");
+    if (now.month()<10)
+    {
+      lcd.print("0");
+    }
     lcd.print(now.month());
     lcd.print("-");
     lcd.print(now.year());
@@ -585,7 +718,22 @@ void page2()
     lcd.setCursor(0, 2);
     lcd.print("TIME :");
     lcd.setCursor(0, 3);
-    lcd.print("ENGINE RUN :");
+    // lcd.print("ENGINE RUN :");
+    lcd.write(0);
+    lcd.write(1);
+    lcd.print(" RUN : ");
+
+    int countHour = engineRunTime / 3600;
+    Serial.print("CountHour = ");
+    Serial.println(countHour);
+    int countMin = engineRunTime / 60;
+    Serial.print("CountMin = ");
+    Serial.println(countMin);
+
+    lcd.print(countHour);
+    lcd.print("H");
+    lcd.print(countMin);
+    lcd.print("M");
 
     showDisplay = false;
   }
@@ -619,7 +767,160 @@ void page2()
   }
   lcd.print(now.second());
 }
+void page3()
+{
+  if (showDisplay == true)
+  {
+    if (count == 0)
+    {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("  History ");
+      lcd.setCursor(0, 1);
+      lcd.print("Reading Data...     ");
+      lcd.setCursor(0, 2);
+      lcd.print("From SD Card        ");
+      delay(1000);
+    }
 
+    if (count != 0)
+    {
+      myFile = SD.open("data.txt");
+      if (myFile)
+      {
+        Serial.println("---------------------------------");
+        Serial.println("Read Line DataLoger From SD Card..");
+        if (myFile.available())
+        {
+          myFile.seek(position[count]);
+          Serial.print("Position = ");
+          Serial.println(position[count]);
+          Serial.print("History = ");
+          Serial.print(count);
+          Serial.print("/");
+          Serial.println(historyCount);
+          buffer = myFile.readStringUntil('\n');
+          Serial.print("read = ");
+          Serial.println(buffer);
+
+          buffer.setCharAt(buffer.length() - 1, ' ');
+
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("  History ");
+
+          lcd.setCursor(0, 3);
+          lcd.write(2);
+          lcd.setCursor(19, 3);
+          lcd.write(3);
+          lcd.setCursor(10, 0);
+          char buff[16];
+          sprintf(buff, "(%d/%d)", count, historyCount);
+          lcd.print(buff);
+
+          lcd.setCursor(0, 1);
+          char str[64];
+          strcpy(str, buffer.c_str());
+
+          constexpr const char *delim = ",";
+          char *token;
+          token = strtok(str, delim);
+          lcd.print(token);
+
+          while (token != NULL)
+          {
+            //Serial.println(token);
+            token = strtok(NULL, delim);
+            lcd.setCursor(0, 2);
+            lcd.print(token);
+          }
+          showDisplay = true;
+        }
+        myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+      }
+      else
+      {
+        // ถ้าอ่านไม่สำเร็จ ให้แสดง error
+        Serial.println("error opening SD Card");
+        lcd.setCursor(0, 2);
+        lcd.print("  SD Card Error !   ");
+      }
+    }
+    showDisplay = false;
+  }
+
+  if (read == false)
+  {
+    myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
+    if (myFile)
+    {
+      Serial.println("---------------------------------");
+      Serial.println("Read All DataLoger From SD Card..");
+      // อ่านข้อมูลทั้งหมดออกมา
+      while (myFile.available())
+      {
+        if (digitalRead(MODE_BUTTON) == LOW && displayDim == false)
+        {
+          buttonState = 1;
+          page = 1;
+          showDisplay = true;
+          delay(200);
+        }
+        count++;
+        if (count > historyCount)
+        {
+          count = 1;
+        }
+        Serial.print(count);
+        Serial.print(" ");
+        position[count] = myFile.position();
+        buffer = myFile.readStringUntil('\n');
+        Serial.println(buffer);
+        //Serial.println(myFile.position());
+      }
+      myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+      Serial.print("History Count = ");
+      Serial.println(historyCount);
+      Serial.println("---------------------------------");
+
+      count = 1;
+      read = true;
+      showDisplay = true;
+    }
+    else
+    {
+      // ถ้าอ่านไม่สำเร็จ ให้แสดง error
+      Serial.println("error opening SD Card");
+      lcd.setCursor(0, 2);
+      lcd.print("  SD Card Error !   ");
+    }
+
+  }
+  if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
+  {
+    count++;
+    if (count > historyCount)
+    {
+      count = 1;
+    }
+    showDisplay = true;
+    last4 = millis();
+    last5 = millis();
+    delay(200);
+  }
+  if (digitalRead(UP_BUTTON) == LOW && displayDim == false)
+  {
+    count--;
+    if (count < 1)
+    {
+      count = historyCount;
+    }
+    showDisplay = true;
+    last4 = millis();
+    last5 = millis();
+    delay(200);
+  }
+}
 void waterTank_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
@@ -635,7 +936,7 @@ void waterTank_fault()
     lcd.setCursor(0, 2);
     lcd.print("  WATER TANK : LOW  ");
     showDisplay = false;
-    writeDataLoger("Water tank low, ");
+    writeDataLoger("Water tank low,");
   }
 }
 
@@ -651,6 +952,8 @@ void readTemp()
 
 void loop()
 {
+  currentMillis = millis();
+  currentMillis1 = millis();
 
   readTemp();
   readWaterTank();
@@ -663,21 +966,26 @@ void loop()
   {
     if (engineStart == false)
     {
-      last5 = millis();
-      last6 = millis();
+      previousMillis1 = currentMillis1;
       engineStart = true;
     }
-    engineRunTime = engineRunTime + (millis() - last5);
-    engineRunTime = engineRunTime / 1000;
-    eneineRunAll = eneineRunAll + engineRunTime;
-    Serial.println(engineRunTime);
-    Serial.println(eneineRunAll);
+    countSec = ((currentMillis1 - previousMillis1) / 1000);
+    Serial.print("countSec = ");
+    Serial.println(countSec);
   }
-  if (engineRun==false)
+  if (engineRun == false)
   {
-    engineStart = false;
+    if (engineRun == false && engineStart == true)
+    {
+      engineRunTime = engineRunTime + countSec;
+      EEPROM.put(0, engineRunTime);
+      Serial.print("engineRunTime = ");
+      Serial.println(engineRunTime);
+      engineStart = false;
+    }
+    previousMillis1 = 0;
+    countSec = 0;
   }
-  
 
   if (waterTank == true)
   {
@@ -748,7 +1056,8 @@ void loop()
     noTone(BUZZER_PIN);
     showDisplay = true;
     page = 1;
-    writeDataLoger("silence Alarm, ");
+    writeDataLoger("Silence Alarm,");
+    page1();
     delay(200);
   }
 
@@ -757,28 +1066,22 @@ void loop()
     noTone(BUZZER_PIN);
     page = 1;
   }
-  if (digitalRead(UP_BUTTON) == LOW && displayDim == false)
+  if (digitalRead(MODE_BUTTON) == LOW && displayDim == false)
   {
+    read = false;
     buttonState++;
-    if (buttonState > 2)
+    count = 0;
+    if (buttonState > 3)
     {
       buttonState = 1;
     }
-    Serial.println(buttonState);
+    // Serial.println(buttonState);
     showDisplay = true;
+    last4 = millis();
+    last5 = millis();
     delay(200);
   }
-  if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
-  {
-    buttonState--;
-    if (buttonState < 1)
-    {
-      buttonState = 2;
-    }
-    showDisplay = true;
-    Serial.println(buttonState);
-    delay(200);
-  }
+
   if (page == 1 && buttonState == 1 && displayDim == false)
   {
     page1();
@@ -787,6 +1090,11 @@ void loop()
   {
     page = 2;
     page2();
+  }
+  if (buttonState == 3)
+  {
+    page = 3;
+    page3();
   }
 
   if (digitalRead(UP_BUTTON) == LOW || digitalRead(DOWN_BUTTON) == LOW || digitalRead(MODE_BUTTON) == LOW || showDisplay == true)
@@ -798,5 +1106,16 @@ void loop()
       displayDim = false;
       delay(200);
     }
+  }
+  if (buttonState != 1 && millis() - last5 > pageOtherTime)
+  {
+    page = 1;
+    buttonState = 1;
+    count = 0;
+    read = false;
+    last4 = millis();
+    last5 = millis();
+    showDisplay = true;
+    page1();
   }
 }
