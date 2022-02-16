@@ -17,6 +17,7 @@
 #include <SD.h>
 #include <stdio.h>
 #include <string.h>
+#include <Password.h>
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
@@ -35,6 +36,9 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 #define DOWN_BUTTON 39
 #define MODE_BUTTON 40
 
+Password password = Password("1234");
+int currentDigit = 0;
+
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
 
@@ -47,8 +51,8 @@ unsigned long last1 = 0,
 unsigned long waterTankFalut_verify = 15000;
 unsigned long coolingfalut_verify = 5000;
 unsigned long coolingfalut_delay = 3000;
-unsigned long dimTime = 30000;
-unsigned long pageOtherTime = 30000;
+unsigned long dimTime = 1;
+unsigned long pageOtherTime = 60000;
 unsigned long engineRunTime;
 
 bool goodDateTime;
@@ -63,19 +67,21 @@ bool warning = false;
 bool cooling_falut = false;
 bool cooling_fault_delay_start = false;
 bool cooling_fault_verify_start = false;
+bool settingMode = false;
 
 bool showDisplay = false;
 bool displayDim = false;
 bool silence_alarm = false;
 int page = 1;
 float temp = 35.0;
+int overTemp = 95;
 int historyCount = 0;
-int historyLine = 1;
 String buffer;
 bool read = false;
 unsigned long position[1000];
 int count = 0;
 int buttonState = 1;
+int menu = 0;
 
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -132,7 +138,7 @@ void writeDataLoger(String event)
     myFile.print(event); // สั่งให้เขียนข้อมูล
     myFile.print(now.day());
     myFile.print("-");
-    if (now.month()<10)
+    if (now.month() < 10)
     {
       myFile.print("0");
     }
@@ -208,7 +214,7 @@ void verifySD()
   lcd.print("   SD Card is OK    ");
   delay(1000);
 
-  //SD.remove("data.txt");
+  // SD.remove("data.txt");
 
   myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์ที่ชื่อ test.txt เพื่อเขียนข้อมูล โหมด FILE_WRITE
 
@@ -334,15 +340,15 @@ void startTone()
 void beep()
 {
   tone(BUZZER_PIN, 523, 0);
-  delay(100);
+  delay(40);
   noTone(BUZZER_PIN);
-  delay(100);
 }
 
 void displayOff()
 {
   lcd.noDisplay();
   lcd.noBacklight();
+  password.reset();
 }
 void displayOn()
 {
@@ -620,6 +626,275 @@ void readArmedSw()
   }
 }
 
+void updateMenu()
+{
+  switch (menu)
+  {
+  case 0:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" Over Temp:");
+    lcd.print(overTemp);
+    lcd.print(" C");
+    lcd.print((char)223);
+    lcd.setCursor(0, 2);
+    lcd.print(" Flow SW Delay:");
+    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(" S.");
+    lcd.setCursor(0, 3);
+    lcd.print(" Sleep Mode:");
+    lcd.print(dimTime);
+    lcd.print(" M.");
+    settingMode = false;
+    break;
+
+  case 1:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(">Over Temp:");
+    lcd.print(overTemp);
+    lcd.print(" C");
+    lcd.print((char)223);
+    lcd.setCursor(0, 2);
+    lcd.print(" Flow SW Delay:");
+    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(" S.");
+    lcd.setCursor(0, 3);
+    lcd.print(" Sleep Mode:");
+    lcd.print(dimTime);
+    lcd.print(" M.");
+    break;
+  case 2:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" Over Temp:");
+    lcd.print(overTemp);
+    lcd.print(" C");
+    lcd.print((char)223);
+    lcd.setCursor(0, 2);
+    lcd.print(">Flow SW Delay:");
+    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(" S.");
+    lcd.setCursor(0, 3);
+    lcd.print(" Sleep Mode:");
+    lcd.print(dimTime);
+    lcd.print(" M.");
+    break;
+  case 3:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" Over Temp:");
+    lcd.print(overTemp);
+    lcd.print(" C");
+    lcd.print((char)223);
+    lcd.setCursor(0, 2);
+    lcd.print(" Flow SW Delay:");
+    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(" S.");
+    lcd.setCursor(0, 3);
+    lcd.print(">Sleep Mode:");
+    lcd.print(dimTime);
+    lcd.print(" M.");
+    break;
+  }
+}
+void setOverTemp()
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" Over Temp Shut OFF ");
+  lcd.setCursor(8, 2);
+  lcd.print(overTemp);
+  lcd.print(" C");
+  lcd.print((char)223);
+
+  delay(2000);
+}
+void setFlowSW_delay()
+{
+}
+void setDimTime()
+{
+}
+void excuteAction()
+{
+  if (password.evaluate())
+  {
+    switch (menu)
+    {
+    case 1:
+      setOverTemp();
+      break;
+    case 2:
+      setFlowSW_delay();
+      break;
+    case 3:
+      setDimTime();
+      break;
+    }
+  }
+  else
+  {
+    bool enter = false;
+    int cursor = 5;
+    int oldCursor;
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("   Enter Password   ");
+    lcd.setCursor(0, 1);
+    lcd.print("     0123456789     ");
+    lcd.setCursor(14, 3);
+    lcd.print("Cancel");
+
+    lcd.setCursor(cursor, 1);
+    lcd.blink();
+
+    while (!password.evaluate())
+    {
+      if (!digitalRead(DOWN_BUTTON))
+      {
+        beep();
+        cursor++;
+        if (cursor > 15)
+        {
+          cursor = 5;
+        }
+        enter = true;
+        lcd.setCursor(cursor, 1);
+        delay(200);
+        while (!digitalRead(DOWN_BUTTON))
+          ;
+      }
+      if (!digitalRead(UP_BUTTON))
+      {
+        beep();
+        cursor--;
+        if (cursor < 5)
+        {
+          cursor = 15;
+        }
+        enter = true;
+        lcd.setCursor(cursor, 1);
+        delay(200);
+        while (!digitalRead(DOWN_BUTTON))
+          ;
+      }
+      if (cursor == 15)
+      {
+        lcd.setCursor(14, 3);
+      }
+      if (!digitalRead(MODE_BUTTON) && enter == true)
+      {
+        if (cursor == 5)
+        {
+          password.append('0');
+        }
+        else if (cursor == 6)
+        {
+          password.append('1');
+        }
+        else if (cursor == 7)
+        {
+          password.append('2');
+        }
+        else if (cursor == 8)
+        {
+          password.append('3');
+        }
+        else if (cursor == 9)
+        {
+          password.append('4');
+        }
+        else if (cursor == 10)
+        {
+          password.append('5');
+        }
+        else if (cursor == 11)
+        {
+          password.append('6');
+        }
+        else if (cursor == 12)
+        {
+          password.append('7');
+        }
+        else if (cursor == 13)
+        {
+          password.append('8');
+        }
+        else if (cursor == 14)
+        {
+          password.append('9');
+        }
+
+        oldCursor = cursor;
+        lcd.setCursor(8 + currentDigit, 2);
+        lcd.print("*");
+
+        if (cursor == 15)
+        {
+          lcd.noBlink();
+          break;
+        }
+
+        currentDigit++;
+        if (currentDigit == 4)
+        {
+          if (password.evaluate())
+          {
+            tone(BUZZER_PIN, 523, 0);
+            delay(50);
+            noTone(BUZZER_PIN);
+            delay(50);
+            tone(BUZZER_PIN, 523, 0);
+            delay(200);
+            noTone(BUZZER_PIN);
+            Serial.println("Password OK");
+            lcd.noBlink();
+            break;
+          }
+          else
+          {
+            Serial.println("Password Wrong !");
+            tone(BUZZER_PIN, 400, 0);
+            delay(200);
+            noTone(BUZZER_PIN);
+          }
+        }
+        else
+        {
+          beep();
+        }
+
+        if (currentDigit > 3)
+        {
+          password.reset();
+          currentDigit = 0;
+          lcd.setCursor(0, 2);
+          lcd.print("                    ");
+        }
+        if (cursor != 15)
+        {
+          lcd.setCursor(oldCursor, 1);
+        }
+
+        delay(200);
+
+        while (!digitalRead(DOWN_BUTTON))
+          ;
+      }
+    }
+  }
+}
+
 void page1()
 {
   if (showDisplay == true)
@@ -686,7 +961,7 @@ void page1()
 
     showDisplay = false;
   }
-  if (displayDim == false && millis() - last4 >= dimTime)
+  if (displayDim == false && millis() - last4 >= (dimTime * 60000))
   {
     displayOff();
     displayDim = true;
@@ -707,7 +982,7 @@ void page2()
     lcd.setCursor(6, 1);
     lcd.print(now.day());
     lcd.print("-");
-    if (now.month()<10)
+    if (now.month() < 10)
     {
       lcd.print("0");
     }
@@ -780,7 +1055,7 @@ void page3()
       lcd.print("Reading Data...     ");
       lcd.setCursor(0, 2);
       lcd.print("From SD Card        ");
-      delay(1000);
+      //delay(500);
     }
 
     if (count != 0)
@@ -829,7 +1104,7 @@ void page3()
 
           while (token != NULL)
           {
-            //Serial.println(token);
+            // Serial.println(token);
             token = strtok(NULL, delim);
             lcd.setCursor(0, 2);
             lcd.print(token);
@@ -876,7 +1151,7 @@ void page3()
         position[count] = myFile.position();
         buffer = myFile.readStringUntil('\n');
         Serial.println(buffer);
-        //Serial.println(myFile.position());
+        // Serial.println(myFile.position());
       }
       myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
       Serial.print("History Count = ");
@@ -894,7 +1169,6 @@ void page3()
       lcd.setCursor(0, 2);
       lcd.print("  SD Card Error !   ");
     }
-
   }
   if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
   {
@@ -921,6 +1195,79 @@ void page3()
     delay(200);
   }
 }
+void page4()
+{
+  if (showDisplay == true)
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" Over Temp:");
+    lcd.print(overTemp);
+    lcd.print(" C");
+    lcd.print((char)223);
+    lcd.setCursor(0, 2);
+    lcd.print(" Flow SW Delay:");
+    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(" S.");
+    lcd.setCursor(0, 3);
+    lcd.print(" Sleep Mode:");
+    lcd.print(dimTime);
+    lcd.print(" M.");
+
+    showDisplay = false;
+  }
+  if (!digitalRead(DOWN_BUTTON))
+  {
+    menu++;
+    settingMode = true;
+
+    if (menu > 3)
+    {
+      menu = 0;
+    }
+
+    updateMenu();
+
+    // showDisplay = true;
+    last4 = millis();
+    last5 = millis();
+    delay(200);
+    while (!digitalRead(DOWN_BUTTON))
+      ;
+  }
+  if (!digitalRead(UP_BUTTON))
+  {
+    menu--;
+    settingMode = true;
+    if (menu < 0)
+    {
+      menu = 3;
+    }
+    updateMenu();
+
+    // showDisplay = true;
+    last4 = millis();
+    last5 = millis();
+    delay(200);
+    while (!digitalRead(UP_BUTTON))
+      ;
+  }
+  if (!digitalRead(MODE_BUTTON))
+  {
+    // settingMode = true;
+    excuteAction();
+    updateMenu();
+
+    last4 = millis();
+    last5 = millis();
+    delay(200);
+    while (!digitalRead(MODE_BUTTON))
+      ;
+  }
+}
+
 void waterTank_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
@@ -1066,12 +1413,12 @@ void loop()
     noTone(BUZZER_PIN);
     page = 1;
   }
-  if (digitalRead(MODE_BUTTON) == LOW && displayDim == false)
+  if (digitalRead(MODE_BUTTON) == LOW && displayDim == false && settingMode == false)
   {
     read = false;
     buttonState++;
     count = 0;
-    if (buttonState > 3)
+    if (buttonState > 4)
     {
       buttonState = 1;
     }
@@ -1096,6 +1443,11 @@ void loop()
     page = 3;
     page3();
   }
+  if (buttonState == 4)
+  {
+    page = 4;
+    page4();
+  }
 
   if (digitalRead(UP_BUTTON) == LOW || digitalRead(DOWN_BUTTON) == LOW || digitalRead(MODE_BUTTON) == LOW || showDisplay == true)
   {
@@ -1116,6 +1468,7 @@ void loop()
     last4 = millis();
     last5 = millis();
     showDisplay = true;
+    settingMode = false;
     page1();
   }
 }
