@@ -6,8 +6,8 @@
    put on github 26/01/2022
 */
 
-//**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 4(CS pin can be changed) and pin #52(SS)must be an output
-
+//**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 53(pinMode OUTPUT**)
+#include <avr/wdt.h>
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <Wire.h>
@@ -19,12 +19,9 @@
 #include <string.h>
 #include <Password.h>
 
-LiquidCrystal_I2C lcd(0x27, 20, 4);
-
 #define SILENCE_ALARM 9
 #define TEST_PIN 10
 #define ARMED_PIN 11
-
 #define LED_YELLOW 15
 #define LED_RED 16
 #define BUZZER_PIN 17
@@ -32,29 +29,29 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 #define OIL_PRES_SW 19
 #define WATER_TANK 12
 
+#define RESET_BUTTON 36
 #define UP_BUTTON 38
 #define DOWN_BUTTON 39
 #define MODE_BUTTON 40
+#define ABORT_BUTTON 41
 
-Password password = Password("1234");
-int currentDigit = 0;
-
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+Password password = Password("0000");
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
-
 unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
-
 unsigned long last1 = 0,
               last2 = 0, last3 = 0, last4 = 0, last5, last6;
 unsigned long waterTankFalut_verify = 15000;
 unsigned long coolingfalut_verify = 5000;
-unsigned long coolingfalut_delay = 3000;
-unsigned long dimTime = 1;
+unsigned long coolingfalut_delay;
+unsigned long dimTime;
 unsigned long pageOtherTime = 60000;
 unsigned long engineRunTime;
 
+bool engineShutOff = false;
 bool goodDateTime;
 bool testSw = false;
 bool armedSw = false;
@@ -68,13 +65,13 @@ bool cooling_falut = false;
 bool cooling_fault_delay_start = false;
 bool cooling_fault_verify_start = false;
 bool settingMode = false;
-
 bool showDisplay = false;
 bool displayDim = false;
 bool silence_alarm = false;
+bool tempFault = false;
 int page = 1;
 float temp = 35.0;
-int overTemp = 95;
+int overTemp;
 int historyCount = 0;
 String buffer;
 bool read = false;
@@ -82,6 +79,7 @@ unsigned long position[1000];
 int count = 0;
 int buttonState = 1;
 int menu = 0;
+int countDown = 60;
 
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -127,7 +125,7 @@ const int chipSelect = 53;
 
 void writeDataLoger(String event)
 {
-  myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์ที่ชื่อ test.txt เพื่อเขียนข้อมูล โหมด FILE_WRITE
+  myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์เพื่อเขียนข้อมูล โหมด FILE_WRITE
 
   // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
   if (myFile)
@@ -165,7 +163,7 @@ void writeDataLoger(String event)
   }
   else
   {
-    // ถ้าเปิดไฟลืไม่สำเร็จ ให้แสดง error
+    // ถ้าเปิดไฟล์ไม่สำเร็จ ให้แสดง error
     Serial.println("error opening File");
   }
   // เปิดไฟล์เพื่ออ่าน
@@ -215,89 +213,42 @@ void verifySD()
   delay(1000);
 
   // SD.remove("data.txt");
-
-  myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์ที่ชื่อ test.txt เพื่อเขียนข้อมูล โหมด FILE_WRITE
-
-  // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
-  if (myFile)
-  {
-    DateTime now = rtc.now();
-
-    Serial.print("Writing to SD Card ");
-    myFile.print("Power On,"); // สั่งให้เขียนข้อมูล
-    myFile.print(now.day());
-    myFile.print("-");
-    if (now.month() < 10)
-    {
-      myFile.print("0");
-    }
-    myFile.print(now.month());
-    myFile.print("-");
-    myFile.print(now.year());
-    myFile.print(" ");
-    myFile.print(now.hour());
-    myFile.print(":");
-    if (now.minute() < 10)
-    {
-      myFile.print("0");
-    }
-    myFile.print(now.minute());
-    myFile.print(":");
-    if (now.second() < 10)
-    {
-      myFile.print("0");
-    }
-    myFile.println(now.second());
-
-    myFile.close(); // ปิดไฟล์
-    Serial.println("done.");
-  }
-  else
-  {
-    // ถ้าเปิดไฟลืไม่สำเร็จ ให้แสดง error
-    Serial.println("error opening File");
-  }
-
-  // เปิดไฟล์เพื่ออ่าน
-  myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
-  if (myFile)
-  {
-
-    Serial.println("---------------------------------");
-    Serial.println("Read All DataLoger From SD Card..");
-    // อ่านข้อมูลทั้งหมดออกมา
-    while (myFile.available())
-    {
-      // Serial.write(myFile.read());
-      historyCount++;
-      Serial.print(historyCount);
-      Serial.print(" ");
-      buffer = myFile.readStringUntil('\n');
-
-      Serial.println(buffer); // Printing for debugging purpose
-    }
-    myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
-    Serial.print("History Count = ");
-    Serial.println(historyCount);
-    Serial.println("---------------------------------");
-  }
-  else
-  {
-    // ถ้าอ่านไม่สำเร็จ ให้แสดง error
-    Serial.println("error opening SD Card");
-  }
 }
 void readEeprom()
 {
   EEPROM.begin();
   engineRunTime = EEPROM.read(0);
+  overTemp = EEPROM.read(10);
+  coolingfalut_delay = EEPROM.read(20);
+  dimTime = EEPROM.read(30);
 
   if (engineRunTime < 0 || engineRunTime > 4294967294)
   {
     engineRunTime = 0;
   }
+  if (overTemp < 10 || overTemp > 180)
+  {
+    overTemp = 95;
+  }
+  if (coolingfalut_delay < 1000 || coolingfalut_delay > 30000)
+  {
+    coolingfalut_delay = 5000;
+  }
+  if (dimTime < 1 || dimTime > 30)
+  {
+    dimTime = 15;
+  }
+
   Serial.print("EngineRunTime = ");
   Serial.println(engineRunTime);
+  Serial.print("Over Temp = ");
+  Serial.println(overTemp);
+  Serial.print("Cooling Fault Delay = ");
+  Serial.print(coolingfalut_delay / 1000);
+  Serial.println(" S.");
+  Serial.print("Dimer LCD Time = ");
+  Serial.print(dimTime);
+  Serial.println(" M.");
 }
 
 void startTone()
@@ -376,6 +327,7 @@ void showTimeNow()
 
 void setup()
 {
+  
   Serial.begin(115200);
   Serial.println("------------------------------------------------");
   Serial.println("Safety Engine Control");
@@ -413,6 +365,9 @@ void setup()
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DOWN_BUTTON, INPUT_PULLUP);
   pinMode(MODE_BUTTON, INPUT_PULLUP);
+  pinMode(ABORT_BUTTON, INPUT_PULLUP);
+  pinMode(RESET_BUTTON, INPUT_PULLUP);
+
   pinMode(chipSelect, OUTPUT);
 
   digitalWrite(LED_YELLOW, HIGH);
@@ -433,7 +388,6 @@ void setup()
   {
     lcd.setCursor(0, 2); //
     lcd.print(" Couldn't find RTC  ");
-
     Serial.println("Couldn't find RTC");
     while (1)
       ;
@@ -442,7 +396,6 @@ void setup()
   {
     lcd.setCursor(0, 2); //
     lcd.print("  Date Time is OK   ");
-
     Serial.println("Date Time is OK");
     delay(1000);
   }
@@ -450,6 +403,7 @@ void setup()
   showTimeNow();
 
   verifySD();
+  writeDataLoger("Power ON,");
 
   beep();
   delay(200);
@@ -468,7 +422,7 @@ void silenceAlarmReset()
 }
 void buzzerAlarm()
 {
-  if (silence_alarm == false)
+  if (silence_alarm == false && engineShutOff == false)
   {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= 500)
@@ -499,6 +453,64 @@ void cooling_fault()
     writeDataLoger("Cooling System Fault,");
   }
 }
+void engineOverTemp()
+{
+  digitalWrite(LED_YELLOW, HIGH);
+  buzzerAlarm();
+  if (showDisplay == true && silence_alarm == false)
+  {
+    silenceAlarmReset();
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("! ENGINE OVER TEMP !");
+    lcd.setCursor(7, 1);
+    lcd.print(temp, 1);
+    lcd.print(" C");
+    lcd.print((char)223);
+    writeDataLoger("Engine Over Temp,");
+    showDisplay = false;
+  }
+  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == true && (digitalRead(ABORT_BUTTON) != LOW))
+  {
+
+    countDown--;
+    Serial.println(countDown);
+    last6 = millis();
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("! ENGINE OVER TEMP !");
+    lcd.setCursor(7, 1);
+    lcd.print(temp, 1);
+    lcd.print(" C");
+    lcd.print((char)223);
+    lcd.setCursor(0, 2);
+    lcd.print(" ShutOFF Countdown  ");
+    lcd.setCursor(7, 3);
+    lcd.print(countDown);
+    lcd.print(" Sec.");
+  }
+  if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
+  {
+    countDown = 60;
+  }
+  if (countDown == 0 && engineShutOff == false)
+  {
+    // Shut OFF
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("     OVER  TEMP     ");
+    lcd.setCursor(0, 2);
+    lcd.print(" ! ENGINE SHUTOFF ! ");
+
+    tone(BUZZER_PIN, 800, 0);
+
+    writeDataLoger("Engine ShutOFF,");
+    engineShutOff = true;
+  }
+  
+}
 void disable_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
@@ -514,6 +526,7 @@ void disable_fault()
     lcd.print("  SHUTOFF DISABLE   ");
     showDisplay = false;
     writeDataLoger("SHUTOFF DISABLE,");
+    showDisplay = false;
   }
 }
 
@@ -604,7 +617,7 @@ void readTestSw()
     digitalWrite(LED_YELLOW, LOW);
   }
 }
-void readArmedSw()
+void readDisableSw()
 {
   if (digitalRead(ARMED_PIN) == LOW)
   {
@@ -640,7 +653,7 @@ void updateMenu()
     lcd.print(" C");
     lcd.print((char)223);
     lcd.setCursor(0, 2);
-    lcd.print(" Flow SW Delay:");
+    lcd.print(" Cool'F Delay:");
     lcd.print(coolingfalut_delay / 1000);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
@@ -660,7 +673,7 @@ void updateMenu()
     lcd.print(" C");
     lcd.print((char)223);
     lcd.setCursor(0, 2);
-    lcd.print(" Flow SW Delay:");
+    lcd.print(" Cool'F Delay:");
     lcd.print(coolingfalut_delay / 1000);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
@@ -678,7 +691,7 @@ void updateMenu()
     lcd.print(" C");
     lcd.print((char)223);
     lcd.setCursor(0, 2);
-    lcd.print(">Flow SW Delay:");
+    lcd.print(">Cool'F Delay:");
     lcd.print(coolingfalut_delay / 1000);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
@@ -696,7 +709,7 @@ void updateMenu()
     lcd.print(" C");
     lcd.print((char)223);
     lcd.setCursor(0, 2);
-    lcd.print(" Flow SW Delay:");
+    lcd.print(" Cool'F Delay:");
     lcd.print(coolingfalut_delay / 1000);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
@@ -708,21 +721,358 @@ void updateMenu()
 }
 void setOverTemp()
 {
+  bool exit = false;
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(" Over Temp Shut OFF ");
+  lcd.print("  OverTemp ShutOFF  ");
   lcd.setCursor(8, 2);
   lcd.print(overTemp);
   lcd.print(" C");
   lcd.print((char)223);
 
-  delay(2000);
+  delay(1000);
+  while (!exit)
+  {
+    if (!digitalRead(UP_BUTTON))
+    {
+      // beep();
+      overTemp++;
+      if (overTemp > 180)
+      {
+        overTemp = 10;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("  OverTemp ShutOFF  ");
+      lcd.setCursor(8, 2);
+      lcd.print(overTemp);
+      lcd.print(" C");
+      lcd.print((char)223);
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      // beep();
+      overTemp--;
+      if (overTemp < 10)
+      {
+        overTemp = 180;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("  OverTemp ShutOFF  ");
+      lcd.setCursor(8, 2);
+      lcd.print(overTemp);
+      lcd.print(" C");
+      lcd.print((char)223);
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      // beep();
+      EEPROM.put(10, overTemp);
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+  }
 }
-void setFlowSW_delay()
+void setCoolFault_delay()
 {
+  bool exit = false;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" Cooling Fault Delay");
+  lcd.setCursor(6, 2);
+  lcd.print(coolingfalut_delay / 1000);
+  lcd.print(" Second");
+
+  delay(1000);
+  while (!exit)
+  {
+    if (!digitalRead(UP_BUTTON))
+    {
+      // beep();
+      coolingfalut_delay = coolingfalut_delay + 1000;
+      if (coolingfalut_delay > 30000)
+      {
+        coolingfalut_delay = 1000;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(" Cooling Fault Delay");
+      lcd.setCursor(6, 2);
+      lcd.print(coolingfalut_delay / 1000);
+      lcd.print(" Second");
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      // beep();
+      coolingfalut_delay = coolingfalut_delay - 1000;
+      if (coolingfalut_delay < 1000)
+      {
+        coolingfalut_delay = 30000;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(" Cooling Fault Delay");
+      lcd.setCursor(6, 2);
+      lcd.print(coolingfalut_delay / 1000);
+      lcd.print(" Second");
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      // beep();
+      EEPROM.put(20, coolingfalut_delay);
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+  }
 }
 void setDimTime()
 {
+  bool exit = false;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("  Sleep Mode Timer  ");
+  lcd.setCursor(8, 2);
+  lcd.print(dimTime);
+  lcd.print(" Minute");
+
+  delay(1000);
+  while (!exit)
+  {
+    if (!digitalRead(UP_BUTTON))
+    {
+      // beep();
+      dimTime++;
+      if (dimTime > 30)
+      {
+        dimTime = 1;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("  Sleep Mode Timer  ");
+      lcd.setCursor(8, 2);
+      lcd.print(dimTime);
+      lcd.print(" Minute");
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      // beep();
+      dimTime--;
+      if (dimTime < 1)
+      {
+        dimTime = 30;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("  Sleep Mode Timer  ");
+      lcd.setCursor(8, 2);
+      lcd.print(dimTime);
+      lcd.print(" Minute");
+
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      // beep();
+      EEPROM.put(30, dimTime);
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+  }
+}
+void enterPassword()
+{
+  int cursor = 5;
+  int oldCursor;
+  bool reset = false;
+  int currentDigit = 0;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("   Enter Password   ");
+  lcd.setCursor(0, 1);
+  lcd.print("     0123456789     ");
+  lcd.setCursor(0, 3);
+  lcd.print("Reset         Cancel");
+  delay(500);
+  lcd.setCursor(cursor, 1);
+  lcd.blink();
+
+  while (!password.evaluate())
+  {
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      beep();
+      cursor++;
+      if (cursor > 16)
+      {
+        cursor = 5;
+      }
+
+      lcd.setCursor(cursor, 1);
+
+      reset = false;
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(UP_BUTTON))
+    {
+      beep();
+      cursor--;
+      if (cursor < 5)
+      {
+        cursor = 16;
+      }
+
+      lcd.setCursor(cursor, 1);
+
+      reset = false;
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (cursor == 15 && reset == false)
+    {
+      lcd.setCursor(0, 3);
+    }
+    if (cursor == 16)
+    {
+      lcd.setCursor(14, 3);
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+
+      if (cursor == 5)
+      {
+        password.append('0');
+      }
+      else if (cursor == 6)
+      {
+        password.append('1');
+      }
+      else if (cursor == 7)
+      {
+        password.append('2');
+      }
+      else if (cursor == 8)
+      {
+        password.append('3');
+      }
+      else if (cursor == 9)
+      {
+        password.append('4');
+      }
+      else if (cursor == 10)
+      {
+        password.append('5');
+      }
+      else if (cursor == 11)
+      {
+        password.append('6');
+      }
+      else if (cursor == 12)
+      {
+        password.append('7');
+      }
+      else if (cursor == 13)
+      {
+        password.append('8');
+      }
+      else if (cursor == 14)
+      {
+        password.append('9');
+      }
+      lcd.setCursor(8 + currentDigit, 2);
+      lcd.print("*");
+      currentDigit++;
+
+      if (cursor == 15)
+      {
+        password.reset();
+        currentDigit = 0;
+        lcd.setCursor(0, 2);
+        lcd.print("                    ");
+        reset = true;
+        cursor = 5;
+        lcd.setCursor(5, 1);
+      }
+      if (cursor == 16)
+      {
+        lcd.noBlink();
+        break;
+      }
+      if (currentDigit == 4)
+      {
+        if (password.evaluate())
+        {
+          tone(BUZZER_PIN, 523, 0);
+          delay(50);
+          noTone(BUZZER_PIN);
+          delay(50);
+          tone(BUZZER_PIN, 523, 0);
+          delay(200);
+          noTone(BUZZER_PIN);
+          Serial.println("Password OK");
+          lcd.setCursor(0, 2);
+          lcd.print("    Password OK     ");
+          delay(1000);
+          lcd.noBlink();
+          break;
+        }
+        else
+        {
+          Serial.println("Password Wrong !");
+          tone(BUZZER_PIN, 400, 0);
+          delay(200);
+          noTone(BUZZER_PIN);
+          lcd.setCursor(0, 2);
+          lcd.print("  Password Wrong !  ");
+          delay(1000);
+        }
+      }
+      else
+      {
+        beep();
+      }
+
+      if (currentDigit > 3)
+      {
+        password.reset();
+        currentDigit = 0;
+        lcd.setCursor(0, 2);
+        lcd.print("                    ");
+      }
+      if (cursor != 15)
+      {
+        oldCursor = cursor;
+        lcd.setCursor(oldCursor, 1);
+      }
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+  }
 }
 void excuteAction()
 {
@@ -734,7 +1084,7 @@ void excuteAction()
       setOverTemp();
       break;
     case 2:
-      setFlowSW_delay();
+      setCoolFault_delay();
       break;
     case 3:
       setDimTime();
@@ -743,155 +1093,7 @@ void excuteAction()
   }
   else
   {
-    bool enter = false;
-    int cursor = 5;
-    int oldCursor;
-
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("   Enter Password   ");
-    lcd.setCursor(0, 1);
-    lcd.print("     0123456789     ");
-    lcd.setCursor(14, 3);
-    lcd.print("Cancel");
-
-    lcd.setCursor(cursor, 1);
-    lcd.blink();
-
-    while (!password.evaluate())
-    {
-      if (!digitalRead(DOWN_BUTTON))
-      {
-        beep();
-        cursor++;
-        if (cursor > 15)
-        {
-          cursor = 5;
-        }
-        enter = true;
-        lcd.setCursor(cursor, 1);
-        delay(200);
-        while (!digitalRead(DOWN_BUTTON))
-          ;
-      }
-      if (!digitalRead(UP_BUTTON))
-      {
-        beep();
-        cursor--;
-        if (cursor < 5)
-        {
-          cursor = 15;
-        }
-        enter = true;
-        lcd.setCursor(cursor, 1);
-        delay(200);
-        while (!digitalRead(DOWN_BUTTON))
-          ;
-      }
-      if (cursor == 15)
-      {
-        lcd.setCursor(14, 3);
-      }
-      if (!digitalRead(MODE_BUTTON) && enter == true)
-      {
-        if (cursor == 5)
-        {
-          password.append('0');
-        }
-        else if (cursor == 6)
-        {
-          password.append('1');
-        }
-        else if (cursor == 7)
-        {
-          password.append('2');
-        }
-        else if (cursor == 8)
-        {
-          password.append('3');
-        }
-        else if (cursor == 9)
-        {
-          password.append('4');
-        }
-        else if (cursor == 10)
-        {
-          password.append('5');
-        }
-        else if (cursor == 11)
-        {
-          password.append('6');
-        }
-        else if (cursor == 12)
-        {
-          password.append('7');
-        }
-        else if (cursor == 13)
-        {
-          password.append('8');
-        }
-        else if (cursor == 14)
-        {
-          password.append('9');
-        }
-
-        oldCursor = cursor;
-        lcd.setCursor(8 + currentDigit, 2);
-        lcd.print("*");
-
-        if (cursor == 15)
-        {
-          lcd.noBlink();
-          break;
-        }
-
-        currentDigit++;
-        if (currentDigit == 4)
-        {
-          if (password.evaluate())
-          {
-            tone(BUZZER_PIN, 523, 0);
-            delay(50);
-            noTone(BUZZER_PIN);
-            delay(50);
-            tone(BUZZER_PIN, 523, 0);
-            delay(200);
-            noTone(BUZZER_PIN);
-            Serial.println("Password OK");
-            lcd.noBlink();
-            break;
-          }
-          else
-          {
-            Serial.println("Password Wrong !");
-            tone(BUZZER_PIN, 400, 0);
-            delay(200);
-            noTone(BUZZER_PIN);
-          }
-        }
-        else
-        {
-          beep();
-        }
-
-        if (currentDigit > 3)
-        {
-          password.reset();
-          currentDigit = 0;
-          lcd.setCursor(0, 2);
-          lcd.print("                    ");
-        }
-        if (cursor != 15)
-        {
-          lcd.setCursor(oldCursor, 1);
-        }
-
-        delay(200);
-
-        while (!digitalRead(DOWN_BUTTON))
-          ;
-      }
-    }
+    enterPassword();
   }
 }
 
@@ -909,9 +1111,9 @@ void page1()
     lcd.setCursor(0, 2);
     lcd.print("COOLING SYST.:");
     lcd.setCursor(0, 3);
-    lcd.print("ENGINE TEMP :");
-
-    lcd.setCursor(13, 3);
+    lcd.write(0);
+    lcd.write(1);
+    lcd.print(" TEMP:");
     lcd.print(temp, 1);
     lcd.print(" C");
     lcd.print((char)223);
@@ -1055,7 +1257,7 @@ void page3()
       lcd.print("Reading Data...     ");
       lcd.setCursor(0, 2);
       lcd.print("From SD Card        ");
-      //delay(500);
+      // delay(500);
     }
 
     if (count != 0)
@@ -1208,7 +1410,7 @@ void page4()
     lcd.print(" C");
     lcd.print((char)223);
     lcd.setCursor(0, 2);
-    lcd.print(" Flow SW Delay:");
+    lcd.print(" Cool'F Delay:");
     lcd.print(coolingfalut_delay / 1000);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
@@ -1289,11 +1491,23 @@ void waterTank_fault()
 
 void readTemp()
 {
-  float newTemp = 36.0;
+  tempFault = true;
+  float newTemp = 45.0;
   if (newTemp != temp)
   {
     temp = newTemp;
-    showDisplay = true;
+  }
+  if (temp >= overTemp)
+  {
+    bool newOverTemp = true;
+    if (newOverTemp != tempFault)
+    {
+      tempFault = newOverTemp;
+      showDisplay = true;
+      last6 = millis();
+    }
+    page = 0;
+    engineOverTemp();
   }
 }
 
@@ -1307,7 +1521,7 @@ void loop()
   readOilPressSw();
   readFlowSw();
   readTestSw();
-  readArmedSw();
+  readDisableSw();
 
   if (engineRun == true)
   {
@@ -1341,8 +1555,12 @@ void loop()
   }
   if (armedSw == false)
   {
-    disable_fault();
-    page = 0;
+    if (tempFault == false)
+    {
+      disable_fault();
+    }
+
+    // page = 0;
   }
   if (coolSys == false && oilPress == true)
   {
@@ -1401,14 +1619,17 @@ void loop()
   {
     silence_alarm = true;
     noTone(BUZZER_PIN);
-    showDisplay = true;
-    page = 1;
     writeDataLoger("Silence Alarm,");
-    page1();
+    if (tempFault == false || armedSw == false)
+    {
+      showDisplay = true;
+      page = 1;
+      page1();
+    }
     delay(200);
   }
 
-  if (waterTank != true && armedSw != false && cooling_falut != true)
+  if (waterTank != true && armedSw != false && cooling_falut != true && tempFault != true)
   {
     noTone(BUZZER_PIN);
     page = 1;
@@ -1470,5 +1691,29 @@ void loop()
     showDisplay = true;
     settingMode = false;
     page1();
+  }
+  if (digitalRead(RESET_BUTTON) == LOW)
+  {
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("        RESET       ");
+    noTone(BUZZER_PIN);
+    writeDataLoger("Reset,");
+    delay(5000);
+
+    wdt_enable(WDTO_15MS);
+    while (1)
+    {
+    }
+    // page = 1;
+    // buttonState = 1;
+    // count = 0;
+    // read = false;
+    // last4 = millis();
+    // last5 = millis();
+    // showDisplay = true;
+    // engineShutOff = false;
+    // countDown = 60;
+    // page1();
   }
 }
