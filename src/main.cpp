@@ -9,6 +9,7 @@
 //**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 53(pinMode OUTPUT**)
 #include <avr/wdt.h>
 #include <Arduino.h>
+#include <TimerOne.h>
 #include <EEPROM.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -25,15 +26,18 @@
 #define LED_YELLOW 15
 #define LED_RED 16
 #define BUZZER_PIN 17
-#define FLOW_SW 18
+#define FLOW_SW 14
 #define OIL_PRES_SW 19
 #define WATER_TANK 12
+#define BELL_PIN 42
+#define PULSE_PIN 5
 
 #define RESET_BUTTON 36
 #define UP_BUTTON 38
 #define DOWN_BUTTON 39
 #define MODE_BUTTON 40
 #define ABORT_BUTTON 41
+
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 Password password = Password("0000");
@@ -80,6 +84,13 @@ int count = 0;
 int buttonState = 1;
 int menu = 0;
 int countDown = 60;
+unsigned long engineRmp;
+
+volatile int rpmcount = 0;
+int rpm = 0;
+unsigned long lastmillis = 0;
+
+unsigned long t = 200000, f, k = 512; // default 1000 μs (1000 Hz), meander, pulse
 
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -122,6 +133,14 @@ byte downChar[8] = {
 
 File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
 const int chipSelect = 53;
+
+void rpm_fan()
+{
+  /* this code will be executed every time the interrupt 0 (pin2) gets low.*/
+  rpmcount++;
+  //Serial.println(rpmcount);
+  //Serial.println("Interrupt");
+}
 
 void writeDataLoger(String event)
 {
@@ -221,6 +240,7 @@ void readEeprom()
   overTemp = EEPROM.read(10);
   coolingfalut_delay = EEPROM.read(20);
   dimTime = EEPROM.read(30);
+  engineRmp = EEPROM.read(40);
 
   if (engineRunTime < 0 || engineRunTime > 4294967294)
   {
@@ -237,6 +257,10 @@ void readEeprom()
   if (dimTime < 1 || dimTime > 30)
   {
     dimTime = 15;
+  }
+  if (engineRmp < 500 || engineRmp > 20000)
+  {
+    engineRmp = 3000;
   }
 
   Serial.print("EngineRunTime = ");
@@ -327,7 +351,7 @@ void showTimeNow()
 
 void setup()
 {
-  
+
   Serial.begin(115200);
   Serial.println("------------------------------------------------");
   Serial.println("Safety Engine Control");
@@ -361,12 +385,19 @@ void setup()
   pinMode(LED_YELLOW, OUTPUT);
   pinMode(LED_RED, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(PULSE_PIN, INPUT);
+
+  pinMode(6, OUTPUT);
+
+  attachInterrupt(5, rpm_fan, RISING);
+  // interrupt cero (0) is on pin two(2).
 
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DOWN_BUTTON, INPUT_PULLUP);
   pinMode(MODE_BUTTON, INPUT_PULLUP);
   pinMode(ABORT_BUTTON, INPUT_PULLUP);
   pinMode(RESET_BUTTON, INPUT_PULLUP);
+
 
   pinMode(chipSelect, OUTPUT);
 
@@ -381,6 +412,7 @@ void setup()
   delay(500);
   digitalWrite(LED_YELLOW, LOW);
   digitalWrite(LED_RED, LOW);
+
 
   readEeprom();
 
@@ -509,7 +541,6 @@ void engineOverTemp()
     writeDataLoger("Engine ShutOFF,");
     engineShutOff = true;
   }
-  
 }
 void disable_fault()
 {
@@ -717,6 +748,18 @@ void updateMenu()
     lcd.print(dimTime);
     lcd.print(" M.");
     break;
+  case 4:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(">");
+    lcd.write(0);
+    lcd.write(1);
+    lcd.print(" Start: ");
+    lcd.print(engineRmp);
+    lcd.print(" RPM");
+    break;
   }
 }
 void setOverTemp()
@@ -894,6 +937,66 @@ void setDimTime()
     {
       // beep();
       EEPROM.put(30, dimTime);
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+  }
+}
+void setEngineRpm()
+{
+  bool exit = false;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" Engine Start (RMP) ");
+  lcd.setCursor(8, 2);
+  lcd.print(engineRmp);
+  lcd.print(" RPM");
+
+  delay(1000);
+  while (!exit)
+  {
+    if (!digitalRead(UP_BUTTON))
+    {
+      // beep();
+      engineRmp = engineRmp + 100;
+      if (engineRmp > 30000)
+      {
+        engineRmp = 500;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(" Engine Start (RMP) ");
+      lcd.setCursor(8, 2);
+      lcd.print(engineRmp);
+      lcd.print(" RPM");
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      // beep();
+      engineRmp = engineRmp - 100;
+      if (engineRmp < 500)
+      {
+        engineRmp = 30000;
+      }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(" Engine Start (RMP) ");
+      lcd.setCursor(8, 2);
+      lcd.print(engineRmp);
+      lcd.print(" RPM");
+
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      // beep();
+      EEPROM.put(40, engineRmp);
       break;
       while (!digitalRead(DOWN_BUTTON))
         ;
@@ -1088,6 +1191,9 @@ void excuteAction()
       break;
     case 3:
       setDimTime();
+      break;
+    case 4:
+      setEngineRpm();
       break;
     }
   }
@@ -1425,7 +1531,7 @@ void page4()
     menu++;
     settingMode = true;
 
-    if (menu > 3)
+    if (menu > 4)
     {
       menu = 0;
     }
@@ -1445,7 +1551,7 @@ void page4()
     settingMode = true;
     if (menu < 0)
     {
-      menu = 3;
+      menu = 4;
     }
     updateMenu();
 
@@ -1456,7 +1562,7 @@ void page4()
     while (!digitalRead(UP_BUTTON))
       ;
   }
-  if (!digitalRead(MODE_BUTTON))
+  if (!digitalRead(MODE_BUTTON) && settingMode == true)
   {
     // settingMode = true;
     excuteAction();
@@ -1643,14 +1749,14 @@ void loop()
     {
       buttonState = 1;
     }
-    // Serial.println(buttonState);
+    Serial.println(buttonState);
     showDisplay = true;
     last4 = millis();
     last5 = millis();
     delay(200);
   }
 
-  if (page == 1 && buttonState == 1 && displayDim == false)
+  if (buttonState == 1 && displayDim == false)
   {
     page1();
   }
@@ -1694,6 +1800,12 @@ void loop()
   }
   if (digitalRead(RESET_BUTTON) == LOW)
   {
+    if (displayDim == true)
+    {
+      displayOn();
+      displayDim = false;
+    }
+
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("        RESET       ");
@@ -1705,15 +1817,19 @@ void loop()
     while (1)
     {
     }
-    // page = 1;
-    // buttonState = 1;
-    // count = 0;
-    // read = false;
-    // last4 = millis();
-    // last5 = millis();
-    // showDisplay = true;
-    // engineShutOff = false;
-    // countDown = 60;
-    // page1();
   }
+  //  Timer1.initialize(t); // period
+  //  Timer1.pwm(6, k);     // k - fill factor 0-1023
+  //  if (millis() - lastmillis >= 500)
+  //  {
+  //    /*Update every one second, this will be equal to reading frequency (Hz).*/
+  //    detachInterrupt(5); // Disable interrupt when calculating
+  //    rpm = rpmcount * 60;
+  //    /* Convert frequency to RPM, note: this works for one interruption per full rotation. For two interrupts per full rotation use rpmcount * 30.*/
+  //    Serial.print(rpm); // print the rpm value.
+  //    Serial.println(" ");
+  //    rpmcount = 0;                        // Restart the RPM counter
+  //    lastmillis = millis();               // Update lastmillis
+  //    attachInterrupt(5, rpm_fan, RISING); // enable interrupt
+  // }                                      
 }
