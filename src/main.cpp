@@ -20,30 +20,30 @@
 #include <string.h>
 #include <Password.h>
 
-#define SILENCE_ALARM 9
-#define TEST_PIN 10
 #define ARMED_PIN 11
-#define LED_YELLOW 15
-#define LED_RED 16
-#define BUZZER_PIN 17
 #define FLOW_SW 14
 #define OIL_PRES_SW 19
 #define WATER_TANK 12
+
+#define LED_YELLOW 15
+#define LED_SHUTOFF 16
+#define LED_DISABLE 22
+#define BUZZER_PIN 17
 #define BELL_PIN 42
-#define PULSE_PIN 5
+#define ENGINE_RELAY_SHUTOFF 43
 
 #define RESET_BUTTON 36
 #define UP_BUTTON 38
 #define DOWN_BUTTON 39
 #define MODE_BUTTON 40
 #define ABORT_BUTTON 41
-
+#define SILENCE_ALARM_BUTTON 9
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 Password password = Password("0000");
+
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
-unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
 unsigned long last1 = 0,
@@ -93,7 +93,6 @@ unsigned long lastmillis = 0;
 unsigned long t = 200000, f, k = 512; // default 1000 μs (1000 Hz), meander, pulse
 
 RTC_DS3231 rtc;
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 byte engineChar0[8] = {
     B01111,
     B00011,
@@ -134,14 +133,12 @@ byte downChar[8] = {
 File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
 const int chipSelect = 53;
 
-void rpm_fan()
+void rpmEngine()
 {
-  /* this code will be executed every time the interrupt 0 (pin2) gets low.*/
   rpmcount++;
-  //Serial.println(rpmcount);
-  //Serial.println("Interrupt");
+  // Serial.println(rpmcount);
+  // Serial.println("Interrupt");
 }
-
 void writeDataLoger(String event)
 {
   myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์เพื่อเขียนข้อมูล โหมด FILE_WRITE
@@ -222,8 +219,9 @@ void verifySD()
   if (!SD.begin(chipSelect))
   {
     Serial.println("initialization failed!");
-    lcd.setCursor(0, 2); //
+    lcd.setCursor(0, 2);
     lcd.print("  SD Card Failed!   ");
+    delay(2000);
     return;
   }
   Serial.println("initialization done.");
@@ -274,7 +272,6 @@ void readEeprom()
   Serial.print(dimTime);
   Serial.println(" M.");
 }
-
 void startTone()
 {
   tone(BUZZER_PIN, 262, 200);
@@ -311,14 +308,12 @@ void startTone()
   delay(300);
   noTone(BUZZER_PIN);
 }
-
 void beep()
 {
   tone(BUZZER_PIN, 523, 0);
   delay(40);
   noTone(BUZZER_PIN);
 }
-
 void displayOff()
 {
   lcd.noDisplay();
@@ -330,12 +325,10 @@ void displayOn()
   lcd.backlight();
   lcd.display();
 }
-
 void showTimeNow()
 {
   DateTime now = rtc.now();
 
-  Serial.println(daysOfTheWeek[now.dayOfTheWeek()]);
   Serial.print(now.day());
   Serial.print("-");
   Serial.print(now.month());
@@ -348,102 +341,6 @@ void showTimeNow()
   Serial.print(":");
   Serial.println(now.second());
 }
-
-void setup()
-{
-
-  Serial.begin(115200);
-  Serial.println("------------------------------------------------");
-  Serial.println("Safety Engine Control");
-  Serial.println("Ver.  0.9.0");
-
-  lcd.init(); // initialize the lcd
-  lcd.createChar(0, engineChar0);
-  lcd.createChar(1, engineChar1);
-  lcd.createChar(2, upChar);
-  lcd.createChar(3, downChar);
-
-  lcd.backlight();
-  lcd.clear();
-  lcd.setCursor(0, 0); //
-  lcd.print("--------------------");
-  lcd.setCursor(0, 1); //
-  lcd.print("SafetyEngine Control");
-  lcd.setCursor(0, 2); //
-  lcd.print(" Verifying Systems  ");
-  lcd.setCursor(0, 3); //
-  lcd.print("--------------------");
-  // delay(1000);
-
-  pinMode(TEST_PIN, INPUT_PULLUP);
-  pinMode(ARMED_PIN, INPUT_PULLUP);
-  pinMode(FLOW_SW, INPUT_PULLUP);
-  pinMode(OIL_PRES_SW, INPUT_PULLUP);
-  pinMode(WATER_TANK, INPUT_PULLUP);
-  pinMode(SILENCE_ALARM, INPUT_PULLUP);
-
-  pinMode(LED_YELLOW, OUTPUT);
-  pinMode(LED_RED, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(PULSE_PIN, INPUT);
-
-  pinMode(6, OUTPUT);
-
-  attachInterrupt(5, rpm_fan, RISING);
-  // interrupt cero (0) is on pin two(2).
-
-  pinMode(UP_BUTTON, INPUT_PULLUP);
-  pinMode(DOWN_BUTTON, INPUT_PULLUP);
-  pinMode(MODE_BUTTON, INPUT_PULLUP);
-  pinMode(ABORT_BUTTON, INPUT_PULLUP);
-  pinMode(RESET_BUTTON, INPUT_PULLUP);
-
-
-  pinMode(chipSelect, OUTPUT);
-
-  digitalWrite(LED_YELLOW, HIGH);
-  digitalWrite(LED_RED, HIGH);
-  delay(500);
-  digitalWrite(LED_YELLOW, LOW);
-  digitalWrite(LED_RED, LOW);
-  delay(500);
-  digitalWrite(LED_YELLOW, HIGH);
-  digitalWrite(LED_RED, HIGH);
-  delay(500);
-  digitalWrite(LED_YELLOW, LOW);
-  digitalWrite(LED_RED, LOW);
-
-
-  readEeprom();
-
-  if (!rtc.begin())
-  {
-    lcd.setCursor(0, 2); //
-    lcd.print(" Couldn't find RTC  ");
-    Serial.println("Couldn't find RTC");
-    while (1)
-      ;
-  }
-  else
-  {
-    lcd.setCursor(0, 2); //
-    lcd.print("  Date Time is OK   ");
-    Serial.println("Date Time is OK");
-    delay(1000);
-  }
-  // rtc.adjust(DateTime(__DATE__, __TIME__));
-  showTimeNow();
-
-  verifySD();
-  writeDataLoger("Power ON,");
-
-  beep();
-  delay(200);
-  // startTone();
-  lcd.clear();
-  showDisplay = true;
-}
-
 void silenceAlarmReset()
 {
   bool newsilenceAlarm = false;
@@ -537,6 +434,7 @@ void engineOverTemp()
     lcd.print(" ! ENGINE SHUTOFF ! ");
 
     tone(BUZZER_PIN, 800, 0);
+    digitalWrite(LED_SHUTOFF, HIGH);
 
     writeDataLoger("Engine ShutOFF,");
     engineShutOff = true;
@@ -549,6 +447,7 @@ void disable_fault()
   if (showDisplay == true)
   {
     silenceAlarmReset();
+    digitalWrite(LED_DISABLE, HIGH);
 
     lcd.clear();
     lcd.setCursor(0, 1);
@@ -560,7 +459,24 @@ void disable_fault()
     showDisplay = false;
   }
 }
+void waterTank_fault()
+{
+  digitalWrite(LED_YELLOW, HIGH);
+  buzzerAlarm();
+  if (showDisplay == true)
+  {
+    // Serial.println("Water Tank Low");
+    silenceAlarmReset();
 
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("   !! WARNING !!    ");
+    lcd.setCursor(0, 2);
+    lcd.print("  WATER TANK : LOW  ");
+    showDisplay = false;
+    writeDataLoger("Water tank low,");
+  }
+}
 void readWaterTank()
 {
   if (digitalRead(WATER_TANK) == LOW)
@@ -573,6 +489,8 @@ void readWaterTank()
       if (last1 >= waterTankFalut_verify)
       {
         waterTank = newWaterTank;
+        waterTank_fault();
+        page = 0;
         showDisplay = true;
       }
     }
@@ -609,7 +527,7 @@ void readOilPressSw()
     }
   }
 }
-void readFlowSw()
+void readCoolSys()
 {
   if (digitalRead(FLOW_SW) == LOW)
   {
@@ -629,23 +547,85 @@ void readFlowSw()
       showDisplay = true;
     }
   }
-}
+  if (coolSys == false && oilPress == true)
+  {
+    if (cooling_fault_delay_start == false)
+    {
+      last2 = millis();
+      cooling_fault_delay_start = true;
+    }
+    if (cooling_fault_delay_start == true && millis() - last2 < coolingfalut_delay)
+    {
+      Serial.print("Start Delay Cooling-Fault  ");
+      Serial.println((millis() - last2) / 1000);
+    }
 
-void readTestSw()
-{
-  if (digitalRead(TEST_PIN) == LOW)
-  {
-    testSw = true;
-    Serial.println("Test Mode !");
-    return;
-    digitalWrite(LED_YELLOW, HIGH);
+    if (millis() - last2 > coolingfalut_delay)
+    {
+      if (cooling_fault_verify_start == false)
+      {
+        last3 = millis();
+        cooling_fault_verify_start = true;
+      }
+      if (cooling_fault_verify_start == true && millis() - last3 < coolingfalut_verify)
+      {
+        Serial.print("Start verify Cooling-Fault  ");
+        Serial.println((millis() - last3) / 1000);
+      }
+      if (millis() - last3 >= coolingfalut_verify)
+      {
+        cooling_fault();
+        bool newCoolingFault = true;
+        if (newCoolingFault != cooling_falut)
+        {
+          Serial.println("Cooling System Fault !");
+          cooling_falut = newCoolingFault;
+          showDisplay = true;
+          page = 0;
+        }
+      }
+    }
   }
-  if (digitalRead(TEST_PIN) == HIGH)
+  if (coolSys == false && oilPress == false && cooling_fault_delay_start == true)
   {
-    testSw = false;
-    // Serial.println("Normal Mode");
-    // return;
-    digitalWrite(LED_YELLOW, LOW);
+    last2 = 0;
+    last3 = 0;
+    cooling_falut = false;
+    cooling_fault_verify_start = false;
+    silence_alarm = false;
+
+    showDisplay = true;
+    page = 1;
+    cooling_fault_delay_start = false;
+    Serial.println("coolSys true");
+  }
+}
+void checkEngineRun()
+{
+  currentMillis1 = millis();
+  if (engineRun == true)
+  {
+    if (engineStart == false)
+    {
+      previousMillis1 = currentMillis1;
+      engineStart = true;
+    }
+    countSec = ((currentMillis1 - previousMillis1) / 1000);
+    Serial.print("countSec = ");
+    Serial.println(countSec);
+  }
+  if (engineRun == false)
+  {
+    if (engineRun == false && engineStart == true)
+    {
+      engineRunTime = engineRunTime + countSec;
+      EEPROM.put(0, engineRunTime);
+      Serial.print("engineRunTime = ");
+      Serial.println(engineRunTime);
+      engineStart = false;
+    }
+    previousMillis1 = 0;
+    countSec = 0;
   }
 }
 void readDisableSw()
@@ -656,6 +636,7 @@ void readDisableSw()
     if (newArmedSw != armedSw)
     {
       armedSw = newArmedSw;
+      digitalWrite(LED_DISABLE, LOW);
       showDisplay = true;
     }
   }
@@ -668,8 +649,14 @@ void readDisableSw()
       showDisplay = true;
     }
   }
+  if (armedSw == false)
+  {
+    if (tempFault == false) //////////////////////////////////////
+    {
+      disable_fault();
+    }
+  }
 }
-
 void updateMenu()
 {
   switch (menu)
@@ -1202,7 +1189,6 @@ void excuteAction()
     enterPassword();
   }
 }
-
 void page1()
 {
   if (showDisplay == true)
@@ -1575,26 +1561,27 @@ void page4()
       ;
   }
 }
-
-void waterTank_fault()
+void readSilenceAlarmButton()
 {
-  digitalWrite(LED_YELLOW, HIGH);
-  buzzerAlarm();
-  if (showDisplay == true)
+  if (digitalRead(SILENCE_ALARM_BUTTON) == LOW)
   {
-    // Serial.println("Water Tank Low");
-    silenceAlarmReset();
-
-    lcd.clear();
-    lcd.setCursor(0, 1);
-    lcd.print("   !! WARNING !!    ");
-    lcd.setCursor(0, 2);
-    lcd.print("  WATER TANK : LOW  ");
-    showDisplay = false;
-    writeDataLoger("Water tank low,");
+    silence_alarm = true;
+    noTone(BUZZER_PIN);
+    writeDataLoger("Silence Alarm,");
+    if (tempFault == false || armedSw == false)
+    {
+      showDisplay = true;
+      page = 1;
+      page1();
+    }
+    delay(200);
+  }
+  if (waterTank != true && armedSw != false && cooling_falut != true && tempFault != true)
+  {
+    noTone(BUZZER_PIN);
+    page = 1;
   }
 }
-
 void readTemp()
 {
   tempFault = true;
@@ -1616,130 +1603,8 @@ void readTemp()
     engineOverTemp();
   }
 }
-
-void loop()
+void checkModePageButton()
 {
-  currentMillis = millis();
-  currentMillis1 = millis();
-
-  readTemp();
-  readWaterTank();
-  readOilPressSw();
-  readFlowSw();
-  readTestSw();
-  readDisableSw();
-
-  if (engineRun == true)
-  {
-    if (engineStart == false)
-    {
-      previousMillis1 = currentMillis1;
-      engineStart = true;
-    }
-    countSec = ((currentMillis1 - previousMillis1) / 1000);
-    Serial.print("countSec = ");
-    Serial.println(countSec);
-  }
-  if (engineRun == false)
-  {
-    if (engineRun == false && engineStart == true)
-    {
-      engineRunTime = engineRunTime + countSec;
-      EEPROM.put(0, engineRunTime);
-      Serial.print("engineRunTime = ");
-      Serial.println(engineRunTime);
-      engineStart = false;
-    }
-    previousMillis1 = 0;
-    countSec = 0;
-  }
-
-  if (waterTank == true)
-  {
-    waterTank_fault();
-    page = 0;
-  }
-  if (armedSw == false)
-  {
-    if (tempFault == false)
-    {
-      disable_fault();
-    }
-
-    // page = 0;
-  }
-  if (coolSys == false && oilPress == true)
-  {
-    if (cooling_fault_delay_start == false)
-    {
-      last2 = millis();
-      cooling_fault_delay_start = true;
-    }
-    if (cooling_fault_delay_start == true && millis() - last2 < coolingfalut_delay)
-    {
-      Serial.print("Start Delay Cooling-Fault  ");
-      Serial.println((millis() - last2) / 1000);
-    }
-
-    if (millis() - last2 > coolingfalut_delay)
-    {
-      if (cooling_fault_verify_start == false)
-      {
-        last3 = millis();
-        cooling_fault_verify_start = true;
-      }
-      if (cooling_fault_verify_start == true && millis() - last3 < coolingfalut_verify)
-      {
-        Serial.print("Start verify Cooling-Fault  ");
-        Serial.println((millis() - last3) / 1000);
-      }
-      if (millis() - last3 >= coolingfalut_verify)
-      {
-        cooling_fault();
-        bool newCoolingFault = true;
-        if (newCoolingFault != cooling_falut)
-        {
-          Serial.println("Cooling System Fault !");
-          cooling_falut = newCoolingFault;
-          showDisplay = true;
-          page = 0;
-        }
-      }
-    }
-  }
-  if (coolSys == false && oilPress == false && cooling_fault_delay_start == true)
-  {
-    last2 = 0;
-    last3 = 0;
-    cooling_falut = false;
-    cooling_fault_verify_start = false;
-    silence_alarm = false;
-
-    showDisplay = true;
-    page = 1;
-    cooling_fault_delay_start = false;
-    Serial.println("coolSys true");
-  }
-
-  if (digitalRead(SILENCE_ALARM) == LOW)
-  {
-    silence_alarm = true;
-    noTone(BUZZER_PIN);
-    writeDataLoger("Silence Alarm,");
-    if (tempFault == false || armedSw == false)
-    {
-      showDisplay = true;
-      page = 1;
-      page1();
-    }
-    delay(200);
-  }
-
-  if (waterTank != true && armedSw != false && cooling_falut != true && tempFault != true)
-  {
-    noTone(BUZZER_PIN);
-    page = 1;
-  }
   if (digitalRead(MODE_BUTTON) == LOW && displayDim == false && settingMode == false)
   {
     read = false;
@@ -1798,6 +1663,9 @@ void loop()
     settingMode = false;
     page1();
   }
+}
+void readResetButton()
+{
   if (digitalRead(RESET_BUTTON) == LOW)
   {
     if (displayDim == true)
@@ -1818,6 +1686,114 @@ void loop()
     {
     }
   }
+}
+void setup()
+{
+  Serial.begin(115200);
+  Serial.println("---------------------");
+  Serial.println("Safety Engine Control");
+  Serial.println("Ver.  0.9.0");
+
+  lcd.init();
+  lcd.createChar(0, engineChar0);
+  lcd.createChar(1, engineChar1);
+  lcd.createChar(2, upChar);
+  lcd.createChar(3, downChar);
+
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("--------------------");
+  lcd.setCursor(0, 1);
+  lcd.print("SafetyEngine Control");
+  lcd.setCursor(0, 2);
+  lcd.print(" Verifying Systems  ");
+  lcd.setCursor(0, 3);
+  lcd.print("--------------------");
+  delay(500);
+
+  pinMode(ARMED_PIN, INPUT_PULLUP);      // Sw Armed-Disable
+  pinMode(FLOW_SW, INPUT_PULLUP);        // Flow Sw ระบบหล่อเย็น Narmal Close
+  pinMode(OIL_PRES_SW, INPUT_PULLUP);    // Oil Pressor ON=12/24V.
+  pinMode(WATER_TANK, INPUT_PULLUP);     // เช็คระดับน้ำในบ่อ Normal Close
+  attachInterrupt(5, rpmEngine, RISING); // ขารับสัญญาณ MPU วัดรอบเครื่องยนต์ (Interupt ** PIN18)
+  pinMode(chipSelect, OUTPUT);
+
+  pinMode(LED_YELLOW, OUTPUT);           // LED Fault
+  pinMode(LED_SHUTOFF, OUTPUT);          // LED ShutOFF
+  pinMode(LED_DISABLE, OUTPUT);          // LED Disable-Armed
+  pinMode(BUZZER_PIN, OUTPUT);           // Buzzer Alarm
+  pinMode(BELL_PIN, OUTPUT);             // Bell Alarm
+  pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF Engine
+
+  pinMode(6, OUTPUT);
+
+  pinMode(UP_BUTTON, INPUT_PULLUP);
+  pinMode(DOWN_BUTTON, INPUT_PULLUP);
+  pinMode(MODE_BUTTON, INPUT_PULLUP);
+  pinMode(ABORT_BUTTON, INPUT_PULLUP);
+  pinMode(RESET_BUTTON, INPUT_PULLUP);
+  pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
+
+  // Test LED Boot
+  digitalWrite(LED_YELLOW, HIGH);
+  digitalWrite(LED_SHUTOFF, HIGH);
+  digitalWrite(LED_DISABLE, HIGH);
+  delay(500);
+  digitalWrite(LED_YELLOW, LOW);
+  digitalWrite(LED_SHUTOFF, LOW);
+  digitalWrite(LED_DISABLE, LOW);
+  delay(500);
+  digitalWrite(LED_YELLOW, HIGH);
+  digitalWrite(LED_SHUTOFF, HIGH);
+  digitalWrite(LED_DISABLE, HIGH);
+  delay(500);
+  digitalWrite(LED_YELLOW, LOW);
+  digitalWrite(LED_SHUTOFF, LOW);
+  digitalWrite(LED_DISABLE, LOW);
+
+  readEeprom();
+
+  if (!rtc.begin())
+  {
+    lcd.setCursor(0, 2); //
+    lcd.print(" Couldn't find RTC  ");
+    Serial.println("Couldn't find RTC");
+    while (1)
+      ;
+  }
+  else
+  {
+    lcd.setCursor(0, 2); //
+    lcd.print("  Date Time is OK   ");
+    Serial.println("Date Time is OK");
+    delay(1000);
+  }
+  // rtc.adjust(DateTime(__DATE__, __TIME__));  // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
+  showTimeNow();
+  verifySD();
+  writeDataLoger("Power ON,");
+
+  tone(BUZZER_PIN, 523, 0);
+  delay(80);
+  noTone(BUZZER_PIN);
+  delay(200);
+  // startTone();
+  lcd.clear();
+  showDisplay = true;
+}
+void loop()
+{
+  readTemp();
+  readWaterTank();
+  readOilPressSw();
+  readCoolSys();
+  readDisableSw();
+  checkEngineRun();
+  readSilenceAlarmButton();
+  checkModePageButton();
+  readResetButton();
+
   //  Timer1.initialize(t); // period
   //  Timer1.pwm(6, k);     // k - fill factor 0-1023
   //  if (millis() - lastmillis >= 500)
@@ -1831,5 +1807,5 @@ void loop()
   //    rpmcount = 0;                        // Restart the RPM counter
   //    lastmillis = millis();               // Update lastmillis
   //    attachInterrupt(5, rpm_fan, RISING); // enable interrupt
-  // }                                      
+  // }
 }
