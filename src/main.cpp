@@ -5,8 +5,8 @@
    Ver.  0.9.0
    put on github 26/01/2022
 */
-
 //**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 53(pinMode OUTPUT**)
+
 #include <avr/wdt.h>
 #include <Arduino.h>
 #include <TimerOne.h>
@@ -14,23 +14,24 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <RTClib.h>
-#include <SPI.h>
 #include <SD.h>
 #include <stdio.h>
 #include <string.h>
 #include <Password.h>
+#include <SPI.h>
+#include "Max6675.h"
 
-#define ARMED_PIN 11
 #define FLOW_SW 14
 #define OIL_PRES_SW 19
 #define WATER_TANK 12
-
 #define LED_YELLOW 15
 #define LED_SHUTOFF 16
 #define LED_DISABLE 22
 #define BUZZER_PIN 17
 #define BELL_PIN 42
 #define ENGINE_RELAY_SHUTOFF 43
+#define FIREPUMP_ACC 44
+#define PULSEPIN 18
 
 #define RESET_BUTTON 36
 #define UP_BUTTON 38
@@ -38,7 +39,9 @@
 #define MODE_BUTTON 40
 #define ABORT_BUTTON 41
 #define SILENCE_ALARM_BUTTON 9
+#define DISABLE_SW 11
 
+Max6675 ts(4, 5, 6);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 Password password = Password("0000");
 
@@ -84,7 +87,12 @@ int count = 0;
 int buttonState = 1;
 int menu = 0;
 int countDown = 60;
-unsigned long engineRmp;
+unsigned long engineRPM;
+
+int pulseHigh;    // Integer variable to capture High time of the incoming pulse
+int pulseLow;     // Integer variable to capture Low time of the incoming pulse
+float pulseTotal; // Float variable to capture Total time of the incoming pulse
+float frequency;  // Calculated Frequency
 
 volatile int rpmcount = 0;
 int rpm = 0;
@@ -238,7 +246,7 @@ void readEeprom()
   overTemp = EEPROM.read(10);
   coolingfalut_delay = EEPROM.read(20);
   dimTime = EEPROM.read(30);
-  engineRmp = EEPROM.read(40);
+  engineRPM = EEPROM.read(40);
 
   if (engineRunTime < 0 || engineRunTime > 4294967294)
   {
@@ -256,9 +264,9 @@ void readEeprom()
   {
     dimTime = 15;
   }
-  if (engineRmp < 500 || engineRmp > 20000)
+  if (engineRPM < 500 || engineRPM > 20000)
   {
-    engineRmp = 3000;
+    engineRPM = 3000;
   }
 
   Serial.print("EngineRunTime = ");
@@ -271,6 +279,8 @@ void readEeprom()
   Serial.print("Dimer LCD Time = ");
   Serial.print(dimTime);
   Serial.println(" M.");
+  Serial.print("ENGINE RPM Start = ");
+  Serial.println(engineRPM);
 }
 void startTone()
 {
@@ -602,6 +612,40 @@ void readCoolSys()
 }
 void checkEngineRun()
 {
+  pulseHigh = pulseIn(PULSEPIN, HIGH);
+  pulseLow = pulseIn(PULSEPIN, LOW);
+
+  pulseTotal = pulseHigh + pulseLow; // Time period of the pulse in microseconds
+  frequency = 1000000 / pulseTotal;  // Frequency in Hertz (Hz)
+
+  if (millis() - lastmillis >= 500)
+  {
+
+    Serial.println(frequency); // print the rpm value.
+    lastmillis = millis();     // Update lastmillis
+  }
+  if (frequency >= engineRPM)
+  {
+    bool newEngineRun = true;
+    if (newEngineRun != engineRun)
+    {
+      engineRun = true;
+      writeDataLoger("Eneing RUN,");
+      showDisplay = true;
+    }
+  }
+  if (frequency < engineRPM)
+  {
+    bool newEngineRun = false;
+    if (newEngineRun != engineRun)
+    {
+      engineRun = false;
+      writeDataLoger("Eneing Stop,");
+      showDisplay = true;
+    }
+    
+  }
+
   currentMillis1 = millis();
   if (engineRun == true)
   {
@@ -630,7 +674,7 @@ void checkEngineRun()
 }
 void readDisableSw()
 {
-  if (digitalRead(ARMED_PIN) == LOW)
+  if (digitalRead(DISABLE_SW) == LOW)
   {
     bool newArmedSw = false;
     if (newArmedSw != armedSw)
@@ -640,7 +684,7 @@ void readDisableSw()
       showDisplay = true;
     }
   }
-  if (digitalRead(ARMED_PIN) == HIGH)
+  if (digitalRead(DISABLE_SW) == HIGH)
   {
     bool newArmedSw = true;
     if (newArmedSw != armedSw)
@@ -744,7 +788,7 @@ void updateMenu()
     lcd.write(0);
     lcd.write(1);
     lcd.print(" Start: ");
-    lcd.print(engineRmp);
+    lcd.print(engineRPM);
     lcd.print(" RPM");
     break;
   }
@@ -937,7 +981,7 @@ void setEngineRpm()
   lcd.setCursor(0, 0);
   lcd.print(" Engine Start (RMP) ");
   lcd.setCursor(8, 2);
-  lcd.print(engineRmp);
+  lcd.print(engineRPM);
   lcd.print(" RPM");
 
   delay(1000);
@@ -946,16 +990,16 @@ void setEngineRpm()
     if (!digitalRead(UP_BUTTON))
     {
       // beep();
-      engineRmp = engineRmp + 100;
-      if (engineRmp > 30000)
+      engineRPM = engineRPM + 100;
+      if (engineRPM > 30000)
       {
-        engineRmp = 500;
+        engineRPM = 500;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Engine Start (RMP) ");
       lcd.setCursor(8, 2);
-      lcd.print(engineRmp);
+      lcd.print(engineRPM);
       lcd.print(" RPM");
       delay(200);
       while (!digitalRead(DOWN_BUTTON))
@@ -964,16 +1008,16 @@ void setEngineRpm()
     if (!digitalRead(DOWN_BUTTON))
     {
       // beep();
-      engineRmp = engineRmp - 100;
-      if (engineRmp < 500)
+      engineRPM = engineRPM - 100;
+      if (engineRPM < 500)
       {
-        engineRmp = 30000;
+        engineRPM = 30000;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Engine Start (RMP) ");
       lcd.setCursor(8, 2);
-      lcd.print(engineRmp);
+      lcd.print(engineRPM);
       lcd.print(" RPM");
 
       delay(200);
@@ -983,7 +1027,7 @@ void setEngineRpm()
     if (!digitalRead(MODE_BUTTON))
     {
       // beep();
-      EEPROM.put(40, engineRmp);
+      EEPROM.put(40, engineRPM);
       break;
       while (!digitalRead(DOWN_BUTTON))
         ;
@@ -1210,29 +1254,26 @@ void page1()
     lcd.print(" C");
     lcd.print((char)223);
 
-    if (oilPress == true)
+    if (engineRun == true)
     {
       lcd.setCursor(9, 0);
       lcd.print("RUN");
-      lcd.setCursor(14, 1);
-      lcd.print("NORMAL");
-      if (engineRun == false)
-      {
-        engineRun = true;
-        writeDataLoger("Engine Run,");
-      }
     }
-    if (oilPress == false)
+    if (engineRun == false)
     {
       lcd.setCursor(9, 0);
       lcd.print("STOP");
+    }
+
+    if (oilPress == true)
+    {
+      lcd.setCursor(14, 1);
+      lcd.print("NORMAL");
+    }
+    if (oilPress == false)
+    {
       lcd.setCursor(14, 1);
       lcd.print("LOW");
-      if (engineRun == true)
-      {
-        engineRun = false;
-        writeDataLoger("Engine Stop,");
-      }
     }
 
     if (coolSys == true)
@@ -1585,7 +1626,7 @@ void readSilenceAlarmButton()
 void readTemp()
 {
   tempFault = true;
-  float newTemp = 45.0;
+  float newTemp = ts.getCelsius();
   if (newTemp != temp)
   {
     temp = newTemp;
@@ -1712,19 +1753,21 @@ void setup()
   lcd.print("--------------------");
   delay(500);
 
-  pinMode(ARMED_PIN, INPUT_PULLUP);      // Sw Armed-Disable
   pinMode(FLOW_SW, INPUT_PULLUP);        // Flow Sw ระบบหล่อเย็น Narmal Close
   pinMode(OIL_PRES_SW, INPUT_PULLUP);    // Oil Pressor ON=12/24V.
   pinMode(WATER_TANK, INPUT_PULLUP);     // เช็คระดับน้ำในบ่อ Normal Close
   attachInterrupt(5, rpmEngine, RISING); // ขารับสัญญาณ MPU วัดรอบเครื่องยนต์ (Interupt ** PIN18)
-  pinMode(chipSelect, OUTPUT);
+  pinMode(FIREPUMP_ACC, INPUT);          // ไฟจากตู้ FIREPUMP ACC
+  pinMode(PULSEPIN, INPUT);
 
   pinMode(LED_YELLOW, OUTPUT);           // LED Fault
   pinMode(LED_SHUTOFF, OUTPUT);          // LED ShutOFF
   pinMode(LED_DISABLE, OUTPUT);          // LED Disable-Armed
   pinMode(BUZZER_PIN, OUTPUT);           // Buzzer Alarm
   pinMode(BELL_PIN, OUTPUT);             // Bell Alarm
-  pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF Engine
+  pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF
+
+  pinMode(chipSelect, OUTPUT);
 
   pinMode(6, OUTPUT);
 
@@ -1734,6 +1777,7 @@ void setup()
   pinMode(ABORT_BUTTON, INPUT_PULLUP);
   pinMode(RESET_BUTTON, INPUT_PULLUP);
   pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
+  pinMode(DISABLE_SW, INPUT_PULLUP); // Sw Armed-Disable
 
   // Test LED Boot
   digitalWrite(LED_YELLOW, HIGH);
@@ -1753,6 +1797,10 @@ void setup()
   digitalWrite(LED_DISABLE, LOW);
 
   readEeprom();
+
+  ts.setOffset(97);
+  // set offset for temperature measurement.
+  // 1 stannds for 0.25 Celsius
 
   if (!rtc.begin())
   {
@@ -1793,19 +1841,4 @@ void loop()
   readSilenceAlarmButton();
   checkModePageButton();
   readResetButton();
-
-  //  Timer1.initialize(t); // period
-  //  Timer1.pwm(6, k);     // k - fill factor 0-1023
-  //  if (millis() - lastmillis >= 500)
-  //  {
-  //    /*Update every one second, this will be equal to reading frequency (Hz).*/
-  //    detachInterrupt(5); // Disable interrupt when calculating
-  //    rpm = rpmcount * 60;
-  //    /* Convert frequency to RPM, note: this works for one interruption per full rotation. For two interrupts per full rotation use rpmcount * 30.*/
-  //    Serial.print(rpm); // print the rpm value.
-  //    Serial.println(" ");
-  //    rpmcount = 0;                        // Restart the RPM counter
-  //    lastmillis = millis();               // Update lastmillis
-  //    attachInterrupt(5, rpm_fan, RISING); // enable interrupt
-  // }
 }
