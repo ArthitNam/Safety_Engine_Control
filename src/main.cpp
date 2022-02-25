@@ -41,12 +41,35 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
+// Read RPM
+const byte PulsesPerRevolution = 18;
+const unsigned long ZeroTimeout = 100000;
+const byte numReadings = 2;
+volatile unsigned long LastTimeWeMeasured;
+volatile unsigned long PeriodBetweenPulses = ZeroTimeout + 1000;
+volatile unsigned long PeriodAverage = ZeroTimeout + 1000;
+unsigned long FrequencyRaw;
+unsigned long FrequencyReal;
+unsigned long RPM;
+unsigned int PulseCounter = 1;
+unsigned long PeriodSum;
+unsigned long LastTimeCycleMeasure = LastTimeWeMeasured;
+unsigned long CurrentMicros = micros();
+unsigned int AmountOfReadings = 1;
+unsigned int ZeroDebouncingExtra;
+unsigned long readings[numReadings];
+unsigned long readIndex;
+unsigned long total;
+unsigned long average;
+///////////////////////////////////////////////////////////////
+
 Max6675 ts(4, 5, 6);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 Password password = Password("0000");
 
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
+unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
 unsigned long last1 = 0,
@@ -76,6 +99,7 @@ bool showDisplay = false;
 bool displayDim = false;
 bool silence_alarm = false;
 bool tempFault = false;
+bool buzzerAlarmON = false;
 int page = 1;
 float temp = 35.0;
 int overTemp;
@@ -88,14 +112,11 @@ int buttonState = 1;
 int menu = 0;
 int countDown = 60;
 unsigned long engineRPM;
-
-int pulseHigh;    // Integer variable to capture High time of the incoming pulse
-int pulseLow;     // Integer variable to capture Low time of the incoming pulse
-float pulseTotal; // Float variable to capture Total time of the incoming pulse
-float frequency;  // Calculated Frequency
+bool powerOff = false;
+float frequency;
 
 volatile int rpmcount = 0;
-int rpm = 0;
+// int rpm = 0;
 unsigned long lastmillis = 0;
 
 unsigned long t = 200000, f, k = 512; // default 1000 μs (1000 Hz), meander, pulse
@@ -150,7 +171,6 @@ void rpmEngine()
 void writeDataLoger(String event)
 {
   myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์เพื่อเขียนข้อมูล โหมด FILE_WRITE
-
   // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
   if (myFile)
   {
@@ -264,7 +284,7 @@ void readEeprom()
   {
     dimTime = 15;
   }
-  if (engineRPM < 500 || engineRPM > 20000)
+  if (engineRPM < 200 || engineRPM > 20000)
   {
     engineRPM = 3000;
   }
@@ -361,28 +381,39 @@ void silenceAlarmReset()
 }
 void buzzerAlarm()
 {
-  if (silence_alarm == false && engineShutOff == false)
+  if (buzzerAlarmON == true)
   {
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= 500)
+    if (silence_alarm == false && engineShutOff == false)
     {
-      noTone(BUZZER_PIN);
-      if (currentMillis - previousMillis >= 1000)
+      currentMillis = millis();
+      if (currentMillis - previousMillis >= 500)
       {
         tone(BUZZER_PIN, 800, 0);
-        previousMillis = currentMillis;
+        digitalWrite(BELL_PIN, HIGH);
+
+        if (currentMillis - previousMillis >= 1000)
+        {
+          noTone(BUZZER_PIN);
+          digitalWrite(BELL_PIN, LOW);
+          previousMillis = currentMillis;
+        }
       }
+    }
+  }
+  else
+  {
+    if (engineShutOff == false)
+    {
+      noTone(BUZZER_PIN);
     }
   }
 }
 void cooling_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  buzzerAlarm();
   if (showDisplay == true && silence_alarm == false)
   {
     silenceAlarmReset();
-
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
@@ -391,11 +422,44 @@ void cooling_fault()
     showDisplay = false;
     writeDataLoger("Cooling System Fault,");
   }
+  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
+  {
+
+    countDown--;
+    Serial.println(countDown);
+    last6 = millis();
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("COOLING SYSTEM FALUT");
+    lcd.setCursor(0, 2);
+    lcd.print(" ShutOFF Countdown !");
+    lcd.setCursor(7, 3);
+    lcd.print(countDown);
+    lcd.print(" Sec.");
+  }
+  if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
+  {
+    countDown = 60;
+  }
+  if (countDown == 0 && engineShutOff == false)
+  {
+    // Shut OFF
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("COOLING SYSTEM FALUT");
+    lcd.setCursor(0, 2);
+    lcd.print(" ! ENGINE SHUTOFF ! ");
+
+    tone(BUZZER_PIN, 800, 0);
+    digitalWrite(LED_SHUTOFF, HIGH);
+    writeDataLoger("Engine ShutOFF,");
+    engineShutOff = true;
+  }
 }
 void engineOverTemp()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  buzzerAlarm();
   if (showDisplay == true && silence_alarm == false)
   {
     silenceAlarmReset();
@@ -410,7 +474,7 @@ void engineOverTemp()
     writeDataLoger("Engine Over Temp,");
     showDisplay = false;
   }
-  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == true && (digitalRead(ABORT_BUTTON) != LOW))
+  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
   {
 
     countDown--;
@@ -444,8 +508,9 @@ void engineOverTemp()
     lcd.print(" ! ENGINE SHUTOFF ! ");
 
     tone(BUZZER_PIN, 800, 0);
+    digitalWrite(BELL_PIN, HIGH);
     digitalWrite(LED_SHUTOFF, HIGH);
-
+    digitalWrite(ENGINE_RELAY_SHUTOFF, HIGH);
     writeDataLoger("Engine ShutOFF,");
     engineShutOff = true;
   }
@@ -453,7 +518,6 @@ void engineOverTemp()
 void disable_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  buzzerAlarm();
   if (showDisplay == true)
   {
     silenceAlarmReset();
@@ -472,7 +536,6 @@ void disable_fault()
 void waterTank_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  buzzerAlarm();
   if (showDisplay == true)
   {
     // Serial.println("Water Tank Low");
@@ -491,18 +554,22 @@ void readWaterTank()
 {
   if (digitalRead(WATER_TANK) == LOW)
   {
-    bool newWaterTank = true;
-    if (newWaterTank != waterTank)
+    if (last1 < waterTankFalut_verify)
     {
       last1++;
       Serial.println(last1);
-      if (last1 >= waterTankFalut_verify)
+    }
+    if (last1 >= waterTankFalut_verify)
+    {
+      bool newWaterTank = true;
+      if (newWaterTank != waterTank)
       {
         waterTank = newWaterTank;
-        waterTank_fault();
         page = 0;
         showDisplay = true;
+        buzzerAlarmON = true;
       }
+      waterTank_fault();
     }
   }
   if (digitalRead(WATER_TANK) == HIGH)
@@ -513,6 +580,7 @@ void readWaterTank()
     {
       waterTank = newWaterTank;
       showDisplay = true;
+      buzzerAlarmON = false;
     }
   }
 }
@@ -546,6 +614,7 @@ void readCoolSys()
     {
       coolSys = newCoolSys;
       showDisplay = true;
+      // buzzerAlarmON = true;
     }
   }
   if (digitalRead(FLOW_SW) == HIGH)
@@ -555,9 +624,10 @@ void readCoolSys()
     {
       coolSys = newCoolSys;
       showDisplay = true;
+      // buzzerAlarmON = false;
     }
   }
-  if (coolSys == false && oilPress == true)
+  if (coolSys == false && engineRun == true)
   {
     if (cooling_fault_delay_start == false)
     {
@@ -584,25 +654,27 @@ void readCoolSys()
       }
       if (millis() - last3 >= coolingfalut_verify)
       {
-        cooling_fault();
         bool newCoolingFault = true;
         if (newCoolingFault != cooling_falut)
         {
           Serial.println("Cooling System Fault !");
           cooling_falut = newCoolingFault;
           showDisplay = true;
+          buzzerAlarmON = true;
           page = 0;
         }
+        cooling_fault();
       }
     }
   }
-  if (coolSys == false && oilPress == false && cooling_fault_delay_start == true)
+  if (coolSys == false && engineRun == false && cooling_fault_delay_start == true)
   {
     last2 = 0;
     last3 = 0;
     cooling_falut = false;
     cooling_fault_verify_start = false;
     silence_alarm = false;
+    buzzerAlarmON = false;
 
     showDisplay = true;
     page = 1;
@@ -612,17 +684,53 @@ void readCoolSys()
 }
 void checkEngineRun()
 {
-  pulseHigh = pulseIn(PULSEPIN, HIGH);
-  pulseLow = pulseIn(PULSEPIN, LOW);
-
-  pulseTotal = pulseHigh + pulseLow; // Time period of the pulse in microseconds
-  frequency = 1000000 / pulseTotal;  // Frequency in Hertz (Hz)
-
-  if (millis() - lastmillis >= 500)
+  LastTimeCycleMeasure = LastTimeWeMeasured;
+  CurrentMicros = micros();
+  if (CurrentMicros < LastTimeCycleMeasure)
   {
+    LastTimeCycleMeasure = CurrentMicros;
+  }
+  FrequencyRaw = 10000000000 / PeriodAverage;
+  if (PeriodBetweenPulses > ZeroTimeout - ZeroDebouncingExtra || CurrentMicros - LastTimeCycleMeasure > ZeroTimeout - ZeroDebouncingExtra)
+  {
+    FrequencyRaw = 0;
+    ZeroDebouncingExtra = 2000;
+  }
+  else
+  {
+    ZeroDebouncingExtra = 0;
+  }
+  FrequencyReal = FrequencyRaw / 10000;
+  RPM = FrequencyRaw / PulsesPerRevolution * 60;
+  RPM = RPM / 10000;
+  // Smoothing RPM:
+  total = total - readings[readIndex];
+  readings[readIndex] = RPM;
+  total = total + readings[readIndex];
+  readIndex = readIndex + 1;
+  if (readIndex >= numReadings)
+  {
+    readIndex = 0;
+  }
+  average = total / numReadings;
+  frequency = RPM;
 
-    Serial.println(frequency); // print the rpm value.
-    lastmillis = millis();     // Update lastmillis
+  // frequency = 4000;
+
+  if (millis() - lastmillis >= 500 && frequency > 0)
+  {
+    Serial.print("Period: ");
+    Serial.print(PeriodBetweenPulses);
+    Serial.print("\tReadings: ");
+    Serial.print(AmountOfReadings);
+    Serial.print("\tFrequency: ");
+    Serial.print(FrequencyReal);
+    Serial.print("\tRPM: ");
+    Serial.print(RPM);
+    Serial.print("\tTachometer: ");
+    Serial.println(average);
+
+    lastmillis = millis(); // Update lastmillis
   }
   if (frequency >= engineRPM)
   {
@@ -643,7 +751,6 @@ void checkEngineRun()
       writeDataLoger("Eneing Stop,");
       showDisplay = true;
     }
-    
   }
 
   currentMillis1 = millis();
@@ -655,8 +762,9 @@ void checkEngineRun()
       engineStart = true;
     }
     countSec = ((currentMillis1 - previousMillis1) / 1000);
-    Serial.print("countSec = ");
-    Serial.println(countSec);
+
+    // Serial.print("countSec = ");
+    // Serial.println(countSec);
   }
   if (engineRun == false)
   {
@@ -676,28 +784,24 @@ void readDisableSw()
 {
   if (digitalRead(DISABLE_SW) == LOW)
   {
-    bool newArmedSw = false;
+    bool newArmedSw = true;
     if (newArmedSw != armedSw)
     {
       armedSw = newArmedSw;
       digitalWrite(LED_DISABLE, LOW);
       showDisplay = true;
+      buzzerAlarmON = true;
     }
+    disable_fault();
   }
   if (digitalRead(DISABLE_SW) == HIGH)
   {
-    bool newArmedSw = true;
+    bool newArmedSw = false;
     if (newArmedSw != armedSw)
     {
       armedSw = newArmedSw;
       showDisplay = true;
-    }
-  }
-  if (armedSw == false)
-  {
-    if (tempFault == false) //////////////////////////////////////
-    {
-      disable_fault();
+      buzzerAlarmON = false;
     }
   }
 }
@@ -790,7 +894,187 @@ void updateMenu()
     lcd.print(" Start: ");
     lcd.print(engineRPM);
     lcd.print(" RPM");
+    lcd.setCursor(0, 2);
+    lcd.print(" History");
     break;
+  case 5:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" ");
+    lcd.write(0);
+    lcd.write(1);
+    lcd.print(" Start: ");
+    lcd.print(engineRPM);
+    lcd.print(" RPM");
+    lcd.setCursor(0, 2);
+    lcd.print(">History");
+    break;
+  }
+}
+void history()
+{
+  bool exit = false;
+  delay(200);
+  while (!exit)
+  {
+    if (showDisplay == true)
+    {
+      if (count == 0)
+      {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("  History ");
+        lcd.setCursor(0, 1);
+        lcd.print("Reading Data...     ");
+        lcd.setCursor(0, 2);
+        lcd.print("From SD Card        ");
+        // delay(500);
+      }
+
+      if (count != 0)
+      {
+        myFile = SD.open("data.txt");
+        if (myFile)
+        {
+          Serial.println("---------------------------------");
+          Serial.println("Read Line DataLoger From SD Card..");
+          if (myFile.available())
+          {
+            myFile.seek(position[count]);
+            Serial.print("Position = ");
+            Serial.println(position[count]);
+            Serial.print("History = ");
+            Serial.print(count);
+            Serial.print("/");
+            Serial.println(historyCount);
+            buffer = myFile.readStringUntil('\n');
+            Serial.print("read = ");
+            Serial.println(buffer);
+
+            buffer.setCharAt(buffer.length() - 1, ' ');
+
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("  History ");
+
+            lcd.setCursor(0, 3);
+            lcd.write(2);
+            lcd.setCursor(19, 3);
+            lcd.write(3);
+            lcd.setCursor(10, 0);
+            char buff[16];
+            sprintf(buff, "(%d/%d)", count, historyCount);
+            lcd.print(buff);
+
+            lcd.setCursor(0, 1);
+            char str[64];
+            strcpy(str, buffer.c_str());
+
+            constexpr const char *delim = ",";
+            char *token;
+            token = strtok(str, delim);
+            lcd.print(token);
+
+            while (token != NULL)
+            {
+              // Serial.println(token);
+              token = strtok(NULL, delim);
+              lcd.setCursor(0, 2);
+              lcd.print(token);
+            }
+            showDisplay = true;
+          }
+          myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+        }
+        else
+        {
+          // ถ้าอ่านไม่สำเร็จ ให้แสดง error
+          Serial.println("error opening SD Card");
+          lcd.setCursor(0, 2);
+          lcd.print("  SD Card Error !   ");
+        }
+      }
+      showDisplay = false;
+    }
+
+    if (read == false)
+    {
+      myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
+      if (myFile)
+      {
+        Serial.println("---------------------------------");
+        Serial.println("Read All DataLoger From SD Card..");
+        // อ่านข้อมูลทั้งหมดออกมา
+        while (myFile.available())
+        {
+          if (digitalRead(MODE_BUTTON) == LOW && displayDim == false)
+          {
+            buttonState = 1;
+            page = 1;
+            showDisplay = true;
+            delay(200);
+          }
+          count++;
+          if (count > historyCount)
+          {
+            count = 1;
+          }
+          Serial.print(count);
+          Serial.print(" ");
+          position[count] = myFile.position();
+          buffer = myFile.readStringUntil('\n');
+          Serial.println(buffer);
+          // Serial.println(myFile.position());
+        }
+        myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
+        Serial.print("History Count = ");
+        Serial.println(historyCount);
+        Serial.println("---------------------------------");
+
+        count = 1;
+        read = true;
+        showDisplay = true;
+      }
+      else
+      {
+        // ถ้าอ่านไม่สำเร็จ ให้แสดง error
+        // Serial.println("error opening SD Card");
+        lcd.setCursor(0, 2);
+        lcd.print("  SD Card Error !   ");
+      }
+    }
+    if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
+    {
+      count++;
+      if (count > historyCount)
+      {
+        count = 1;
+      }
+      showDisplay = true;
+      last4 = millis();
+      last5 = millis();
+      delay(200);
+    }
+    if (digitalRead(UP_BUTTON) == LOW && displayDim == false)
+    {
+      count--;
+      if (count < 1)
+      {
+        count = historyCount;
+      }
+      showDisplay = true;
+      last4 = millis();
+      last5 = millis();
+      delay(200);
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
   }
 }
 void setOverTemp()
@@ -1226,6 +1510,10 @@ void excuteAction()
     case 4:
       setEngineRpm();
       break;
+    case 5:
+      showDisplay = true;
+      history();
+      break;
     }
   }
   else
@@ -1280,20 +1568,17 @@ void page1()
     {
       lcd.setCursor(14, 2);
       lcd.print("NORMAL");
-      cooling_falut = false;
     }
     if (coolSys == false)
     {
       lcd.setCursor(14, 2);
       lcd.print("LOW");
-      cooling_falut = false;
     }
-    if (cooling_falut == true && oilPress == true)
+    if (cooling_falut == true && engineRun == true)
     {
       lcd.setCursor(14, 2);
       lcd.print("FAULT");
     }
-
     showDisplay = false;
   }
   if (displayDim == false && millis() - last4 >= (dimTime * 60000))
@@ -1381,155 +1666,17 @@ void page3()
 {
   if (showDisplay == true)
   {
-    if (count == 0)
-    {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("  History ");
-      lcd.setCursor(0, 1);
-      lcd.print("Reading Data...     ");
-      lcd.setCursor(0, 2);
-      lcd.print("From SD Card        ");
-      // delay(500);
-    }
-
-    if (count != 0)
-    {
-      myFile = SD.open("data.txt");
-      if (myFile)
-      {
-        Serial.println("---------------------------------");
-        Serial.println("Read Line DataLoger From SD Card..");
-        if (myFile.available())
-        {
-          myFile.seek(position[count]);
-          Serial.print("Position = ");
-          Serial.println(position[count]);
-          Serial.print("History = ");
-          Serial.print(count);
-          Serial.print("/");
-          Serial.println(historyCount);
-          buffer = myFile.readStringUntil('\n');
-          Serial.print("read = ");
-          Serial.println(buffer);
-
-          buffer.setCharAt(buffer.length() - 1, ' ');
-
-          lcd.clear();
-          lcd.setCursor(0, 0);
-          lcd.print("  History ");
-
-          lcd.setCursor(0, 3);
-          lcd.write(2);
-          lcd.setCursor(19, 3);
-          lcd.write(3);
-          lcd.setCursor(10, 0);
-          char buff[16];
-          sprintf(buff, "(%d/%d)", count, historyCount);
-          lcd.print(buff);
-
-          lcd.setCursor(0, 1);
-          char str[64];
-          strcpy(str, buffer.c_str());
-
-          constexpr const char *delim = ",";
-          char *token;
-          token = strtok(str, delim);
-          lcd.print(token);
-
-          while (token != NULL)
-          {
-            // Serial.println(token);
-            token = strtok(NULL, delim);
-            lcd.setCursor(0, 2);
-            lcd.print(token);
-          }
-          showDisplay = true;
-        }
-        myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
-      }
-      else
-      {
-        // ถ้าอ่านไม่สำเร็จ ให้แสดง error
-        Serial.println("error opening SD Card");
-        lcd.setCursor(0, 2);
-        lcd.print("  SD Card Error !   ");
-      }
-    }
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ENGINE RPM :");
     showDisplay = false;
   }
-
-  if (read == false)
-  {
-    myFile = SD.open("data.txt"); // สั่งให้เปิดไฟล์ชื่อ test.txt เพื่ออ่านข้อมูล
-    if (myFile)
-    {
-      Serial.println("---------------------------------");
-      Serial.println("Read All DataLoger From SD Card..");
-      // อ่านข้อมูลทั้งหมดออกมา
-      while (myFile.available())
-      {
-        if (digitalRead(MODE_BUTTON) == LOW && displayDim == false)
-        {
-          buttonState = 1;
-          page = 1;
-          showDisplay = true;
-          delay(200);
-        }
-        count++;
-        if (count > historyCount)
-        {
-          count = 1;
-        }
-        Serial.print(count);
-        Serial.print(" ");
-        position[count] = myFile.position();
-        buffer = myFile.readStringUntil('\n');
-        Serial.println(buffer);
-        // Serial.println(myFile.position());
-      }
-      myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
-      Serial.print("History Count = ");
-      Serial.println(historyCount);
-      Serial.println("---------------------------------");
-
-      count = 1;
-      read = true;
-      showDisplay = true;
-    }
-    else
-    {
-      // ถ้าอ่านไม่สำเร็จ ให้แสดง error
-      Serial.println("error opening SD Card");
-      lcd.setCursor(0, 2);
-      lcd.print("  SD Card Error !   ");
-    }
-  }
-  if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
-  {
-    count++;
-    if (count > historyCount)
-    {
-      count = 1;
-    }
-    showDisplay = true;
-    last4 = millis();
-    last5 = millis();
-    delay(200);
-  }
-  if (digitalRead(UP_BUTTON) == LOW && displayDim == false)
-  {
-    count--;
-    if (count < 1)
-    {
-      count = historyCount;
-    }
-    showDisplay = true;
-    last4 = millis();
-    last5 = millis();
-    delay(200);
-  }
+  lcd.setCursor(12, 0);
+  lcd.print("       ");
+  lcd.setCursor(12, 0);
+  lcd.print(frequency, 0);
 }
+
 void page4()
 {
   if (showDisplay == true)
@@ -1558,7 +1705,7 @@ void page4()
     menu++;
     settingMode = true;
 
-    if (menu > 4)
+    if (menu > 5)
     {
       menu = 0;
     }
@@ -1578,7 +1725,7 @@ void page4()
     settingMode = true;
     if (menu < 0)
     {
-      menu = 4;
+      menu = 5;
     }
     updateMenu();
 
@@ -1607,7 +1754,7 @@ void readSilenceAlarmButton()
   if (digitalRead(SILENCE_ALARM_BUTTON) == LOW)
   {
     silence_alarm = true;
-    noTone(BUZZER_PIN);
+    buzzerAlarmON = false;
     writeDataLoger("Silence Alarm,");
     if (tempFault == false || armedSw == false)
     {
@@ -1617,11 +1764,7 @@ void readSilenceAlarmButton()
     }
     delay(200);
   }
-  if (waterTank != true && armedSw != false && cooling_falut != true && tempFault != true)
-  {
-    noTone(BUZZER_PIN);
-    page = 1;
-  }
+  buzzerAlarm();
 }
 void readTemp()
 {
@@ -1630,7 +1773,13 @@ void readTemp()
   if (newTemp != temp)
   {
     temp = newTemp;
+    showDisplay = true;
   }
+  if (temp < 0)
+  {
+    temp = 0;
+  }
+
   if (temp >= overTemp)
   {
     bool newOverTemp = true;
@@ -1638,11 +1787,22 @@ void readTemp()
     {
       tempFault = newOverTemp;
       showDisplay = true;
+      buzzerAlarmON = true;
       last6 = millis();
     }
     page = 0;
     engineOverTemp();
   }
+  // if (temp < overTemp)
+  // {
+  //   bool newOverTemp = false;
+  //   if (newOverTemp != tempFault)
+  //   {
+  //     tempFault = newOverTemp;
+  //     buzzerAlarmON = false;
+  //     //last6 = millis();
+  //   }
+  // }
 }
 void checkModePageButton()
 {
@@ -1714,7 +1874,6 @@ void readResetButton()
       displayOn();
       displayDim = false;
     }
-
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("        RESET       ");
@@ -1726,6 +1885,110 @@ void readResetButton()
     while (1)
     {
     }
+  }
+}
+void readAcc()
+{
+  if (digitalRead(FIREPUMP_ACC) == LOW)
+  {
+    if (displayDim == true)
+    {
+      displayOn();
+      displayDim = false;
+    }
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("        RESET       ");
+    noTone(BUZZER_PIN);
+    writeDataLoger("Reset,");
+    delay(5000);
+
+    wdt_enable(WDTO_15MS);
+    while (1)
+    {
+    }
+  }
+}
+void Pulse_Event() // The interrupt runs this to calculate the period between pulses:
+{
+
+  PeriodBetweenPulses = micros() - LastTimeWeMeasured; // Current "micros" minus the old "micros" when the last pulse happens.
+                                                       // This will result with the period (microseconds) between both pulses.
+                                                       // The way is made, the overflow of the "micros" is not going to cause any issue.
+
+  LastTimeWeMeasured = micros(); // Stores the current micros so the next time we have a pulse we would have something to compare with.
+
+  if (PulseCounter >= AmountOfReadings) // If counter for amount of readings reach the set limit:
+  {
+    PeriodAverage = PeriodSum / AmountOfReadings; // Calculate the final period dividing the sum of all readings by the
+                                                  // amount of readings to get the average.
+    PulseCounter = 1;                             // Reset the counter to start over. The reset value is 1 because its the minimum setting allowed (1 reading).
+    PeriodSum = PeriodBetweenPulses;              // Reset PeriodSum to start a new averaging operation.
+
+    // Change the amount of readings depending on the period between pulses.
+    // To be very responsive, ideally we should read every pulse. The problem is that at higher speeds the period gets
+    // too low decreasing the accuracy. To get more accurate readings at higher speeds we should get multiple pulses and
+    // average the period, but if we do that at lower speeds then we would have readings too far apart (laggy or sluggish).
+    // To have both advantages at different speeds, we will change the amount of readings depending on the period between pulses.
+    // Remap period to the amount of readings:
+    int RemapedAmountOfReadings = map(PeriodBetweenPulses, 40000, 5000, 1, 10); // Remap the period range to the reading range.
+    // 1st value is what are we going to remap. In this case is the PeriodBetweenPulses.
+    // 2nd value is the period value when we are going to have only 1 reading. The higher it is, the lower RPM has to be to reach 1 reading.
+    // 3rd value is the period value when we are going to have 10 readings. The higher it is, the lower RPM has to be to reach 10 readings.
+    // 4th and 5th values are the amount of readings range.
+    RemapedAmountOfReadings = constrain(RemapedAmountOfReadings, 1, 10); // Constrain the value so it doesn't go below or above the limits.
+    AmountOfReadings = RemapedAmountOfReadings;                          // Set amount of readings as the remaped value.
+  }
+  else
+  {
+    PulseCounter++;                              // Increase the counter for amount of readings by 1.
+    PeriodSum = PeriodSum + PeriodBetweenPulses; // Add the periods so later we can average.
+  }
+}
+void checkPowerOff()
+{
+  float volt = analogRead(A0) * 6.6 / 1023; // อ่านค่าแรงดัน VCC
+  if (volt < 4.2 && powerOff == false)
+  {
+    myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์เพื่อเขียนข้อมูล โหมด FILE_WRITE
+    // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
+    if (myFile)
+    {
+      DateTime now = rtc.now();
+      myFile.print("Power OFF,"); // สั่งให้เขียนข้อมูล
+      myFile.print(now.day());
+      myFile.print("-");
+      if (now.month() < 10)
+      {
+        myFile.print("0");
+      }
+      myFile.print(now.month());
+      myFile.print("-");
+      myFile.print(now.year());
+      myFile.print(" ");
+      myFile.print(now.hour());
+      myFile.print(":");
+      if (now.minute() < 10)
+      {
+        myFile.print("0");
+      }
+      myFile.print(now.minute());
+      myFile.print(":");
+      if (now.second() < 10)
+      {
+        myFile.print("0");
+      }
+      myFile.println(now.second());
+
+      myFile.close(); // ปิดไฟล์
+      Serial.println("Power-OFF Save done.");
+    }
+    else
+    {
+      // ถ้าเปิดไฟล์ไม่สำเร็จ ให้แสดง error
+      Serial.println("Power-OFF error opening File");
+    }
+    powerOff = true;
   }
 }
 void setup()
@@ -1753,6 +2016,15 @@ void setup()
   lcd.print("--------------------");
   delay(500);
 
+  // Button INPUT_PULLUP ใช้เฉพาะ Simulator**
+  pinMode(UP_BUTTON, INPUT_PULLUP);
+  pinMode(DOWN_BUTTON, INPUT_PULLUP);
+  pinMode(MODE_BUTTON, INPUT_PULLUP);
+  pinMode(ABORT_BUTTON, INPUT_PULLUP);
+  pinMode(RESET_BUTTON, INPUT_PULLUP);
+  pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
+  pinMode(DISABLE_SW, INPUT_PULLUP); // Sw Armed-Disable
+  // Button INPUT_PULLUP ใช้เฉพาะ Simulator**
   pinMode(FLOW_SW, INPUT_PULLUP);        // Flow Sw ระบบหล่อเย็น Narmal Close
   pinMode(OIL_PRES_SW, INPUT_PULLUP);    // Oil Pressor ON=12/24V.
   pinMode(WATER_TANK, INPUT_PULLUP);     // เช็คระดับน้ำในบ่อ Normal Close
@@ -1768,16 +2040,8 @@ void setup()
   pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF
 
   pinMode(chipSelect, OUTPUT);
-
-  pinMode(6, OUTPUT);
-
-  pinMode(UP_BUTTON, INPUT_PULLUP);
-  pinMode(DOWN_BUTTON, INPUT_PULLUP);
-  pinMode(MODE_BUTTON, INPUT_PULLUP);
-  pinMode(ABORT_BUTTON, INPUT_PULLUP);
-  pinMode(RESET_BUTTON, INPUT_PULLUP);
-  pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
-  pinMode(DISABLE_SW, INPUT_PULLUP); // Sw Armed-Disable
+  analogReference(INTERNAL1V1);                                    // เลือกใช้แรงดันอ้างอิงจากภายใน 1.1V
+  attachInterrupt(digitalPinToInterrupt(18), Pulse_Event, RISING); // Enable interrupt LOW to HIGH.
 
   // Test LED Boot
   digitalWrite(LED_YELLOW, HIGH);
@@ -1841,4 +2105,5 @@ void loop()
   readSilenceAlarmButton();
   checkModePageButton();
   readResetButton();
+  checkPowerOff();
 }
