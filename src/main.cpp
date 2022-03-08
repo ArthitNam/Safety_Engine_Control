@@ -65,7 +65,11 @@ unsigned long average;
 
 Max6675 ts(4, 5, 6);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
-Password password = Password("0000");
+
+String passwd;
+Password password = Password("1234");
+String newPasswordString = "";
+char newPassword[5]; // charater string of newPasswordString
 
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
@@ -100,26 +104,21 @@ bool displayDim = false;
 bool silence_alarm = false;
 bool tempFault = false;
 bool buzzerAlarmON = false;
+bool reset = false;
 int page = 1;
 float temp = 35.0;
 int overTemp;
 int historyCount = 0;
 String buffer;
 bool read = false;
-unsigned long position[1000];
 int count = 0;
 int buttonState = 1;
 int menu = 0;
 int countDown = 60;
 unsigned long engineRPM;
 bool powerOff = false;
-float frequency;
-
-volatile int rpmcount = 0;
-// int rpm = 0;
 unsigned long lastmillis = 0;
-
-unsigned long t = 200000, f, k = 512; // default 1000 μs (1000 Hz), meander, pulse
+bool changePasswordDone = false;
 
 RTC_DS3231 rtc;
 byte engineChar0[8] = {
@@ -162,12 +161,7 @@ byte downChar[8] = {
 File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
 const int chipSelect = 53;
 
-void rpmEngine()
-{
-  rpmcount++;
-  // Serial.println(rpmcount);
-  // Serial.println("Interrupt");
-}
+void excuteAction(void);
 void writeDataLoger(String event)
 {
   myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์เพื่อเขียนข้อมูล โหมด FILE_WRITE
@@ -259,6 +253,26 @@ void verifySD()
 
   // SD.remove("data.txt");
 }
+void writeStringToEEPROM(int addrOffset, const String &strToWrite)
+{
+  byte len = strToWrite.length();
+  EEPROM.write(addrOffset, len);
+  for (int i = 0; i < len; i++)
+  {
+    EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
+  }
+}
+String readStringFromEEPROM(int addrOffset)
+{
+  int newStrLen = EEPROM.read(addrOffset);
+  char data[newStrLen + 1];
+  for (int i = 0; i < newStrLen; i++)
+  {
+    data[i] = EEPROM.read(addrOffset + 1 + i);
+  }
+  data[newStrLen] = '\0'; // !!! NOTE !!! Remove the space between the slash "/" and "0" (I've added a space because otherwise there is a display bug)
+  return String(data);
+}
 void readEeprom()
 {
   EEPROM.begin();
@@ -267,6 +281,7 @@ void readEeprom()
   coolingfalut_delay = EEPROM.read(20);
   dimTime = EEPROM.read(30);
   engineRPM = EEPROM.read(40);
+  passwd = readStringFromEEPROM(50);
 
   if (engineRunTime < 0 || engineRunTime > 4294967294)
   {
@@ -288,6 +303,13 @@ void readEeprom()
   {
     engineRPM = 3000;
   }
+  if (passwd == "" || passwd.length() != 4)
+  {
+    passwd = "1234";
+  }
+
+  passwd.toCharArray(newPassword, passwd.length() + 1);
+  password.set(newPassword);
 
   Serial.print("EngineRunTime = ");
   Serial.println(engineRunTime);
@@ -301,6 +323,8 @@ void readEeprom()
   Serial.println(" M.");
   Serial.print("ENGINE RPM Start = ");
   Serial.println(engineRPM);
+  Serial.print("Password = ");
+  Serial.println(passwd);
 }
 void startTone()
 {
@@ -422,9 +446,8 @@ void cooling_fault()
     showDisplay = false;
     writeDataLoger("Cooling System Fault,");
   }
-  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
+  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW) && temp >= overTemp)
   {
-
     countDown--;
     Serial.println(countDown);
     last6 = millis();
@@ -513,24 +536,6 @@ void engineOverTemp()
     digitalWrite(ENGINE_RELAY_SHUTOFF, HIGH);
     writeDataLoger("Engine ShutOFF,");
     engineShutOff = true;
-  }
-}
-void disable_fault()
-{
-  digitalWrite(LED_YELLOW, HIGH);
-  if (showDisplay == true)
-  {
-    silenceAlarmReset();
-    digitalWrite(LED_DISABLE, HIGH);
-
-    lcd.clear();
-    lcd.setCursor(0, 1);
-    lcd.print("   !! WARNING !!    ");
-    lcd.setCursor(0, 2);
-    lcd.print("  SHUTOFF DISABLE   ");
-    showDisplay = false;
-    writeDataLoger("SHUTOFF DISABLE,");
-    showDisplay = false;
   }
 }
 void waterTank_fault()
@@ -713,11 +718,10 @@ void checkEngineRun()
     readIndex = 0;
   }
   average = total / numReadings;
-  frequency = RPM;
 
   // frequency = 4000;
 
-  if (millis() - lastmillis >= 500 && frequency > 0)
+  if (millis() - lastmillis >= 500 && RPM > 0)
   {
     Serial.print("Period: ");
     Serial.print(PeriodBetweenPulses);
@@ -732,17 +736,24 @@ void checkEngineRun()
 
     lastmillis = millis(); // Update lastmillis
   }
-  if (frequency >= engineRPM)
+  if (RPM >= engineRPM)
   {
     bool newEngineRun = true;
     if (newEngineRun != engineRun)
     {
+      engineStart = true;
       engineRun = true;
       writeDataLoger("Eneing RUN,");
+      if (displayDim == true)
+      {
+        displayOn();
+        displayDim = false;
+      }
+      buttonState = 1;
       showDisplay = true;
     }
   }
-  if (frequency < engineRPM)
+  if (RPM < engineRPM)
   {
     bool newEngineRun = false;
     if (newEngineRun != engineRun)
@@ -788,11 +799,22 @@ void readDisableSw()
     if (newArmedSw != armedSw)
     {
       armedSw = newArmedSw;
-      digitalWrite(LED_DISABLE, LOW);
+      digitalWrite(LED_DISABLE, HIGH);
       showDisplay = true;
       buzzerAlarmON = true;
     }
-    disable_fault();
+    if (showDisplay == true)
+    {
+      silenceAlarmReset();
+      digitalWrite(LED_DISABLE, HIGH);
+      lcd.clear();
+      lcd.setCursor(0, 1);
+      lcd.print("   !! WARNING !!    ");
+      lcd.setCursor(0, 2);
+      lcd.print("  SHUTOFF DISABLE   ");
+      showDisplay = false;
+      writeDataLoger("SHUTOFF Disable,");
+    }
   }
   if (digitalRead(DISABLE_SW) == HIGH)
   {
@@ -800,8 +822,10 @@ void readDisableSw()
     if (newArmedSw != armedSw)
     {
       armedSw = newArmedSw;
+      digitalWrite(LED_DISABLE, LOW);
       showDisplay = true;
       buzzerAlarmON = false;
+      writeDataLoger("SHUTOFF Enable,");
     }
   }
 }
@@ -896,6 +920,8 @@ void updateMenu()
     lcd.print(" RPM");
     lcd.setCursor(0, 2);
     lcd.print(" History");
+    lcd.setCursor(0, 3);
+    lcd.print(" Change Password");
     break;
   case 5:
     lcd.clear();
@@ -910,11 +936,37 @@ void updateMenu()
     lcd.print(" RPM");
     lcd.setCursor(0, 2);
     lcd.print(">History");
+    lcd.setCursor(0, 3);
+    lcd.print(" Change Password");
+    break;
+  case 6:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" ");
+    lcd.write(0);
+    lcd.write(1);
+    lcd.print(" Start: ");
+    lcd.print(engineRPM);
+    lcd.print(" RPM");
+    lcd.setCursor(0, 2);
+    lcd.print(" History");
+    lcd.setCursor(0, 3);
+    lcd.print(">Change Password");
+    break;
+  case 7:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(">Remove All History ");
     break;
   }
 }
 void history()
 {
+  unsigned int position[2000];
   bool exit = false;
   delay(200);
   while (!exit)
@@ -1026,7 +1078,7 @@ void history()
           position[count] = myFile.position();
           buffer = myFile.readStringUntil('\n');
           Serial.println(buffer);
-          // Serial.println(myFile.position());
+          Serial.println(myFile.position());
         }
         myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
         Serial.print("History Count = ");
@@ -1069,8 +1121,9 @@ void history()
       last5 = millis();
       delay(200);
     }
-    if (!digitalRead(MODE_BUTTON))
+    if (!digitalRead(MODE_BUTTON) && buttonState == 4)
     {
+      delay(200);
       break;
       while (!digitalRead(DOWN_BUTTON))
         ;
@@ -1322,7 +1375,6 @@ void enterPassword()
 {
   int cursor = 5;
   int oldCursor;
-  bool reset = false;
   int currentDigit = 0;
 
   lcd.clear();
@@ -1346,9 +1398,18 @@ void enterPassword()
       {
         cursor = 5;
       }
-
-      lcd.setCursor(cursor, 1);
-
+      if (cursor < 15)
+      {
+        lcd.setCursor(cursor, 1);
+      }
+      if (cursor == 15)
+      {
+        lcd.setCursor(0, 3);
+      }
+      if (cursor == 16)
+      {
+        lcd.setCursor(14, 3);
+      }
       reset = false;
       delay(200);
       while (!digitalRead(DOWN_BUTTON))
@@ -1362,25 +1423,26 @@ void enterPassword()
       {
         cursor = 16;
       }
-
-      lcd.setCursor(cursor, 1);
-
+      if (cursor < 15)
+      {
+        lcd.setCursor(cursor, 1);
+      }
+      if (cursor == 15)
+      {
+        lcd.setCursor(0, 3);
+      }
+      if (cursor == 16)
+      {
+        lcd.setCursor(14, 3);
+      }
       reset = false;
       delay(200);
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(UP_BUTTON))
         ;
     }
-    if (cursor == 15 && reset == false)
-    {
-      lcd.setCursor(0, 3);
-    }
-    if (cursor == 16)
-    {
-      lcd.setCursor(14, 3);
-    }
+
     if (!digitalRead(MODE_BUTTON))
     {
-
       if (cursor == 5)
       {
         password.append('0');
@@ -1454,8 +1516,10 @@ void enterPassword()
           Serial.println("Password OK");
           lcd.setCursor(0, 2);
           lcd.print("    Password OK     ");
-          delay(1000);
           lcd.noBlink();
+          lcd.setCursor(0, 3);
+          delay(1000);
+          excuteAction();
           break;
         }
         else
@@ -1466,6 +1530,7 @@ void enterPassword()
           noTone(BUZZER_PIN);
           lcd.setCursor(0, 2);
           lcd.print("  Password Wrong !  ");
+          lcd.setCursor(oldCursor, 1);
           delay(1000);
         }
       }
@@ -1487,8 +1552,244 @@ void enterPassword()
         lcd.setCursor(oldCursor, 1);
       }
       delay(200);
+      while (!digitalRead(MODE_BUTTON))
+        ;
+    }
+  }
+}
+void changePassword()
+{
+  int cursor = 5;
+  int oldCursor;
+  int currentDigit = 0;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" Enter New Password ");
+  lcd.setCursor(0, 1);
+  lcd.print("     0123456789     ");
+  lcd.setCursor(0, 3);
+  lcd.print("OK            Cancel");
+  delay(500);
+  lcd.setCursor(cursor, 1);
+  lcd.blink();
+
+  while (!changePasswordDone)
+  {
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      beep();
+      cursor++;
+      if (cursor > 16)
+      {
+        cursor = 5;
+      }
+      if (cursor < 15)
+      {
+        lcd.setCursor(cursor, 1);
+      }
+      if (cursor == 15)
+      {
+        lcd.setCursor(0, 3);
+      }
+      if (cursor == 16)
+      {
+        lcd.setCursor(14, 3);
+      }
+      delay(200);
       while (!digitalRead(DOWN_BUTTON))
         ;
+    }
+    if (!digitalRead(UP_BUTTON))
+    {
+      beep();
+      cursor--;
+      if (cursor < 5)
+      {
+        cursor = 16;
+      }
+      if (cursor < 15)
+      {
+        lcd.setCursor(cursor, 1);
+      }
+      if (cursor == 15)
+      {
+        lcd.setCursor(0, 3);
+      }
+      if (cursor == 16)
+      {
+        lcd.setCursor(14, 3);
+      }
+      delay(200);
+      while (!digitalRead(UP_BUTTON))
+        ;
+    }
+
+    if (!digitalRead(MODE_BUTTON))
+    {
+      beep();
+      if (currentDigit < 5 && cursor < 15)
+      {
+        if (cursor == 5)
+        {
+          newPasswordString = newPasswordString + "0";
+        }
+        else if (cursor == 6)
+        {
+          newPasswordString = newPasswordString + "1";
+        }
+        else if (cursor == 7)
+        {
+          newPasswordString = newPasswordString + "2";
+        }
+        else if (cursor == 8)
+        {
+          newPasswordString = newPasswordString + "3";
+        }
+        else if (cursor == 9)
+        {
+          newPasswordString = newPasswordString + "4";
+        }
+        else if (cursor == 10)
+        {
+          newPasswordString = newPasswordString + "5";
+        }
+        else if (cursor == 11)
+        {
+          newPasswordString = newPasswordString + "6";
+        }
+        else if (cursor == 12)
+        {
+          newPasswordString = newPasswordString + "7";
+        }
+        else if (cursor == 13)
+        {
+          newPasswordString = newPasswordString + "8";
+        }
+        else if (cursor == 14)
+        {
+          newPasswordString = newPasswordString + "9";
+        }
+        currentDigit++;
+        Serial.print("enter = ");
+        Serial.println(newPasswordString);
+        lcd.setCursor(8 + currentDigit, 2);
+        lcd.print("*");
+      }
+      if (cursor == 15)
+      {
+        if (currentDigit == 4)
+        {
+          newPasswordString.toCharArray(newPassword, newPasswordString.length() + 1);
+          password.set(newPassword);
+          password.reset();
+          writeStringToEEPROM(50, newPasswordString);
+          Serial.print("Password changed to ");
+          Serial.println(newPassword);
+
+          lcd.setCursor(0, 2);
+          lcd.print("   Change Password  ");
+          changePasswordDone = true;
+          currentDigit = 0;
+          newPasswordString = "";
+          lcd.noBlink();
+          lcd.setCursor(0, 3);
+          delay(1000);
+          break;
+        }
+      }
+      if (cursor == 16)
+      {
+        lcd.noBlink();
+        break;
+      }
+      if (currentDigit > 4)
+      {
+        tone(BUZZER_PIN, 523, 0);
+        delay(100);
+        noTone(BUZZER_PIN);
+        newPasswordString = "";
+        currentDigit = 0;
+        lcd.setCursor(0, 2);
+        lcd.print("                    ");
+      }
+      if (cursor != 15)
+      {
+        oldCursor = cursor;
+        lcd.setCursor(oldCursor, 1);
+      }
+      delay(200);
+      while (!digitalRead(MODE_BUTTON))
+        ;
+    }
+  }
+}
+void removeAllHistory()
+{
+  bool exit = false;
+  int state = 0;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Remove All History ?");
+  lcd.setCursor(0, 2);
+  lcd.print("         NO         ");
+  delay(1000);
+  while (!exit)
+  {
+    if (!digitalRead(UP_BUTTON))
+    {
+      state++;
+      if (state>1)
+      {
+        state = 0;
+      }
+      
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      state--;
+      if (state <0)
+      {
+        state = 1;
+      }
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      if (SD.exists("data.txt"))
+      {
+        SD.remove("data.txt");
+        Serial.println("Remove data.txt done");
+        lcd.setCursor(0, 2);
+        lcd.print("Delete All Data Done");
+        delay(1000);
+        writeDataLoger("Delete History,");
+      }
+      else
+      {
+        Serial.println("data.txt doesn't exist.");
+        lcd.setCursor(0, 2);
+        lcd.print("Cannot delete data! ");
+        delay(1000);
+      }
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (state==0)
+    {
+      lcd.setCursor(0, 2);
+      lcd.print("         NO         ");
+    }
+    if (state == 1)
+    {
+      lcd.setCursor(0, 2);
+      lcd.print("        Yes!        ");
     }
   }
 }
@@ -1513,6 +1814,13 @@ void excuteAction()
     case 5:
       showDisplay = true;
       history();
+      break;
+    case 6:
+      changePassword();
+      changePasswordDone = false;
+      break;
+    case 7:
+      removeAllHistory();
       break;
     }
   }
@@ -1669,14 +1977,13 @@ void page3()
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("ENGINE RPM :");
+    lcd.print(RPM);
     showDisplay = false;
   }
+  lcd.print("     ");
   lcd.setCursor(12, 0);
-  lcd.print("       ");
-  lcd.setCursor(12, 0);
-  lcd.print(frequency, 0);
+  lcd.print(RPM);
 }
-
 void page4()
 {
   if (showDisplay == true)
@@ -1705,7 +2012,7 @@ void page4()
     menu++;
     settingMode = true;
 
-    if (menu > 5)
+    if (menu > 7)
     {
       menu = 0;
     }
@@ -1725,7 +2032,7 @@ void page4()
     settingMode = true;
     if (menu < 0)
     {
-      menu = 5;
+      menu = 7;
     }
     updateMenu();
 
@@ -1768,7 +2075,7 @@ void readSilenceAlarmButton()
 }
 void readTemp()
 {
-  tempFault = true;
+  // tempFault = true;
   float newTemp = ts.getCelsius();
   if (newTemp != temp)
   {
@@ -1878,7 +2185,7 @@ void readResetButton()
     lcd.setCursor(0, 1);
     lcd.print("        RESET       ");
     noTone(BUZZER_PIN);
-    writeDataLoger("Reset,");
+    writeDataLoger("User Reset,");
     delay(5000);
 
     wdt_enable(WDTO_15MS);
@@ -1889,7 +2196,7 @@ void readResetButton()
 }
 void readAcc()
 {
-  if (digitalRead(FIREPUMP_ACC) == LOW)
+  if (digitalRead(FIREPUMP_ACC) == LOW && engineShutOff == true)
   {
     if (displayDim == true)
     {
@@ -1900,7 +2207,7 @@ void readAcc()
     lcd.setCursor(0, 1);
     lcd.print("        RESET       ");
     noTone(BUZZER_PIN);
-    writeDataLoger("Reset,");
+    writeDataLoger("Firepump Reset,");
     delay(5000);
 
     wdt_enable(WDTO_15MS);
@@ -2025,11 +2332,10 @@ void setup()
   pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
   pinMode(DISABLE_SW, INPUT_PULLUP); // Sw Armed-Disable
   // Button INPUT_PULLUP ใช้เฉพาะ Simulator**
-  pinMode(FLOW_SW, INPUT_PULLUP);        // Flow Sw ระบบหล่อเย็น Narmal Close
-  pinMode(OIL_PRES_SW, INPUT_PULLUP);    // Oil Pressor ON=12/24V.
-  pinMode(WATER_TANK, INPUT_PULLUP);     // เช็คระดับน้ำในบ่อ Normal Close
-  attachInterrupt(5, rpmEngine, RISING); // ขารับสัญญาณ MPU วัดรอบเครื่องยนต์ (Interupt ** PIN18)
-  pinMode(FIREPUMP_ACC, INPUT);          // ไฟจากตู้ FIREPUMP ACC
+  pinMode(FLOW_SW, INPUT_PULLUP);     // Flow Sw ระบบหล่อเย็น Narmal Close
+  pinMode(OIL_PRES_SW, INPUT_PULLUP); // Oil Pressor ON=12/24V.
+  pinMode(WATER_TANK, INPUT_PULLUP);  // เช็คระดับน้ำในบ่อ Normal Close
+  pinMode(FIREPUMP_ACC, INPUT);       // ไฟจากตู้ FIREPUMP ACC
   pinMode(PULSEPIN, INPUT);
 
   pinMode(LED_YELLOW, OUTPUT);           // LED Fault
@@ -2081,7 +2387,7 @@ void setup()
     Serial.println("Date Time is OK");
     delay(1000);
   }
-  // rtc.adjust(DateTime(__DATE__, __TIME__));  // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
+  rtc.adjust(DateTime(__DATE__, __TIME__)); // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
   showTimeNow();
   verifySD();
   writeDataLoger("Power ON,");
@@ -2096,7 +2402,7 @@ void setup()
 }
 void loop()
 {
-  readTemp();
+  // readTemp();
   readWaterTank();
   readOilPressSw();
   readCoolSys();
@@ -2105,5 +2411,6 @@ void loop()
   readSilenceAlarmButton();
   checkModePageButton();
   readResetButton();
+  readAcc();
   checkPowerOff();
 }
