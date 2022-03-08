@@ -105,6 +105,7 @@ bool silence_alarm = false;
 bool tempFault = false;
 bool buzzerAlarmON = false;
 bool reset = false;
+bool noBeep = false;
 int page = 1;
 float temp = 35.0;
 int overTemp;
@@ -157,6 +158,33 @@ byte downChar[8] = {
     B11111,
     B01110,
     B00100};
+byte spkChar[8] = {
+    B00011,
+    B00111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B00111,
+    B00011};
+byte soundChar[8] = {
+    B00001,
+    B00101,
+    B10101,
+    B10101,
+    B10101,
+    B10101,
+    B00101,
+    B00001};
+byte muteChar[8] = {
+    B00000,
+    B00000,
+    B10001,
+    B01010,
+    B00100,
+    B01010,
+    B10001,
+    B00000};
 
 File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
 const int chipSelect = 53;
@@ -282,6 +310,7 @@ void readEeprom()
   dimTime = EEPROM.read(30);
   engineRPM = EEPROM.read(40);
   passwd = readStringFromEEPROM(50);
+  noBeep = EEPROM.read(60);
 
   if (engineRunTime < 0 || engineRunTime > 4294967294)
   {
@@ -307,6 +336,10 @@ void readEeprom()
   {
     passwd = "1234";
   }
+  if (noBeep != false && noBeep != true)
+  {
+    noBeep = false;
+  }
 
   passwd.toCharArray(newPassword, passwd.length() + 1);
   password.set(newPassword);
@@ -325,6 +358,8 @@ void readEeprom()
   Serial.println(engineRPM);
   Serial.print("Password = ");
   Serial.println(passwd);
+  Serial.print("NoBeep Button = ");
+  Serial.println(noBeep);
 }
 void startTone()
 {
@@ -364,9 +399,12 @@ void startTone()
 }
 void beep()
 {
-  tone(BUZZER_PIN, 523, 0);
-  delay(40);
-  noTone(BUZZER_PIN);
+  if (!noBeep)
+  {
+    tone(BUZZER_PIN, 523, 0);
+    delay(40);
+    noTone(BUZZER_PIN);
+  }
 }
 void displayOff()
 {
@@ -463,6 +501,7 @@ void cooling_fault()
   }
   if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
   {
+    beep();
     countDown = 60;
   }
   if (countDown == 0 && engineShutOff == false)
@@ -519,6 +558,7 @@ void engineOverTemp()
   }
   if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
   {
+    beep();
     countDown = 60;
   }
   if (countDown == 0 && engineShutOff == false)
@@ -961,6 +1001,35 @@ void updateMenu()
     lcd.print("  Systems  Setting  ");
     lcd.setCursor(0, 1);
     lcd.print(">Remove All History ");
+    lcd.setCursor(0, 2);
+    lcd.print(" Push Button Beep");
+    lcd.write(4);
+    if (!noBeep)
+    {
+      lcd.write(5);
+    }
+    else
+    {
+      lcd.write(6);
+    }
+    break;
+  case 8:
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("  Systems  Setting  ");
+    lcd.setCursor(0, 1);
+    lcd.print(" Remove All History ");
+    lcd.setCursor(0, 2);
+    lcd.print(">Push Button Beep");
+    lcd.write(4);
+    if (!noBeep)
+    {
+      lcd.write(5);
+    }
+    else
+    {
+      lcd.write(6);
+    }
     break;
   }
 }
@@ -1063,6 +1132,7 @@ void history()
         {
           if (digitalRead(MODE_BUTTON) == LOW && displayDim == false)
           {
+            beep();
             buttonState = 1;
             page = 1;
             showDisplay = true;
@@ -1099,6 +1169,7 @@ void history()
     }
     if (digitalRead(DOWN_BUTTON) == LOW && displayDim == false)
     {
+      beep();
       count++;
       if (count > historyCount)
       {
@@ -1111,6 +1182,7 @@ void history()
     }
     if (digitalRead(UP_BUTTON) == LOW && displayDim == false)
     {
+      beep();
       count--;
       if (count < 1)
       {
@@ -1123,6 +1195,7 @@ void history()
     }
     if (!digitalRead(MODE_BUTTON) && buttonState == 4)
     {
+      beep();
       delay(200);
       break;
       while (!digitalRead(DOWN_BUTTON))
@@ -1146,7 +1219,7 @@ void setOverTemp()
   {
     if (!digitalRead(UP_BUTTON))
     {
-      // beep();
+      beep();
       overTemp++;
       if (overTemp > 180)
       {
@@ -1165,7 +1238,7 @@ void setOverTemp()
     }
     if (!digitalRead(DOWN_BUTTON))
     {
-      // beep();
+      beep();
       overTemp--;
       if (overTemp < 10)
       {
@@ -1184,7 +1257,7 @@ void setOverTemp()
     }
     if (!digitalRead(MODE_BUTTON))
     {
-      // beep();
+      beep();
       EEPROM.put(10, overTemp);
       break;
       while (!digitalRead(DOWN_BUTTON))
@@ -1207,7 +1280,7 @@ void setCoolFault_delay()
   {
     if (!digitalRead(UP_BUTTON))
     {
-      // beep();
+      beep();
       coolingfalut_delay = coolingfalut_delay + 1000;
       if (coolingfalut_delay > 30000)
       {
@@ -1225,7 +1298,7 @@ void setCoolFault_delay()
     }
     if (!digitalRead(DOWN_BUTTON))
     {
-      // beep();
+      beep();
       coolingfalut_delay = coolingfalut_delay - 1000;
       if (coolingfalut_delay < 1000)
       {
@@ -1243,7 +1316,7 @@ void setCoolFault_delay()
     }
     if (!digitalRead(MODE_BUTTON))
     {
-      // beep();
+      beep();
       EEPROM.put(20, coolingfalut_delay);
       break;
       while (!digitalRead(DOWN_BUTTON))
@@ -1266,7 +1339,7 @@ void setDimTime()
   {
     if (!digitalRead(UP_BUTTON))
     {
-      // beep();
+      beep();
       dimTime++;
       if (dimTime > 30)
       {
@@ -1284,7 +1357,7 @@ void setDimTime()
     }
     if (!digitalRead(DOWN_BUTTON))
     {
-      // beep();
+      beep();
       dimTime--;
       if (dimTime < 1)
       {
@@ -1303,7 +1376,7 @@ void setDimTime()
     }
     if (!digitalRead(MODE_BUTTON))
     {
-      // beep();
+      beep();
       EEPROM.put(30, dimTime);
       break;
       while (!digitalRead(DOWN_BUTTON))
@@ -1326,7 +1399,7 @@ void setEngineRpm()
   {
     if (!digitalRead(UP_BUTTON))
     {
-      // beep();
+      beep();
       engineRPM = engineRPM + 100;
       if (engineRPM > 30000)
       {
@@ -1344,7 +1417,7 @@ void setEngineRpm()
     }
     if (!digitalRead(DOWN_BUTTON))
     {
-      // beep();
+      beep();
       engineRPM = engineRPM - 100;
       if (engineRPM < 500)
       {
@@ -1363,7 +1436,7 @@ void setEngineRpm()
     }
     if (!digitalRead(MODE_BUTTON))
     {
-      // beep();
+      beep();
       EEPROM.put(40, engineRPM);
       break;
       while (!digitalRead(DOWN_BUTTON))
@@ -1443,6 +1516,7 @@ void enterPassword()
 
     if (!digitalRead(MODE_BUTTON))
     {
+      //beep();
       if (cursor == 5)
       {
         password.append('0');
@@ -1670,11 +1744,11 @@ void changePassword()
         {
           newPasswordString = newPasswordString + "9";
         }
-        currentDigit++;
         Serial.print("enter = ");
         Serial.println(newPasswordString);
         lcd.setCursor(8 + currentDigit, 2);
         lcd.print("*");
+        currentDigit++;
       }
       if (cursor == 15)
       {
@@ -1738,20 +1812,22 @@ void removeAllHistory()
   {
     if (!digitalRead(UP_BUTTON))
     {
+      beep();
       state++;
-      if (state>1)
+      if (state > 1)
       {
         state = 0;
       }
-      
+
       delay(200);
       while (!digitalRead(DOWN_BUTTON))
         ;
     }
     if (!digitalRead(DOWN_BUTTON))
     {
+      beep();
       state--;
-      if (state <0)
+      if (state < 0)
       {
         state = 1;
       }
@@ -1761,6 +1837,7 @@ void removeAllHistory()
     }
     if (!digitalRead(MODE_BUTTON))
     {
+      beep();
       if (SD.exists("data.txt"))
       {
         SD.remove("data.txt");
@@ -1781,7 +1858,7 @@ void removeAllHistory()
       while (!digitalRead(DOWN_BUTTON))
         ;
     }
-    if (state==0)
+    if (state == 0)
     {
       lcd.setCursor(0, 2);
       lcd.print("         NO         ");
@@ -1790,6 +1867,71 @@ void removeAllHistory()
     {
       lcd.setCursor(0, 2);
       lcd.print("        Yes!        ");
+    }
+  }
+}
+void setNoBeep()
+{
+  bool exit = false;
+  int state = noBeep;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("  Push Button Beep  ");
+  lcd.setCursor(0, 2);
+  if (!noBeep)
+  {
+    lcd.print("        Yes         ");
+  }
+  else
+  {
+    lcd.print("        No          ");
+  }
+  delay(1000);
+
+  while (!exit)
+  {
+    if (!digitalRead(UP_BUTTON))
+    {
+      beep();
+      state++;
+      if (state > 1)
+      {
+        state = 0;
+      }
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (!digitalRead(DOWN_BUTTON))
+    {
+      beep();
+      state--;
+      if (state < 0)
+      {
+        state = 1;
+      }
+      delay(200);
+      while (!digitalRead(DOWN_BUTTON))
+        ;
+    }
+    if (state == 0)
+    {
+      noBeep = false;
+      lcd.setCursor(0, 2);
+      lcd.print("        Yes         ");
+    }
+    if (state == 1)
+    {
+      noBeep = true;
+      lcd.setCursor(0, 2);
+      lcd.print("        No          ");
+    }
+    if (!digitalRead(MODE_BUTTON))
+    {
+      EEPROM.put(60, noBeep);
+      break;
+      while (!digitalRead(DOWN_BUTTON))
+        ;
     }
   }
 }
@@ -1821,6 +1963,9 @@ void excuteAction()
       break;
     case 7:
       removeAllHistory();
+      break;
+    case 8:
+      setNoBeep();
       break;
     }
   }
@@ -2009,10 +2154,11 @@ void page4()
   }
   if (!digitalRead(DOWN_BUTTON))
   {
+    beep();
     menu++;
     settingMode = true;
 
-    if (menu > 7)
+    if (menu > 8)
     {
       menu = 0;
     }
@@ -2028,11 +2174,12 @@ void page4()
   }
   if (!digitalRead(UP_BUTTON))
   {
+    beep();
     menu--;
     settingMode = true;
     if (menu < 0)
     {
-      menu = 7;
+      menu = 8;
     }
     updateMenu();
 
@@ -2045,7 +2192,7 @@ void page4()
   }
   if (!digitalRead(MODE_BUTTON) && settingMode == true)
   {
-    // settingMode = true;
+    beep();
     excuteAction();
     updateMenu();
 
@@ -2060,6 +2207,7 @@ void readSilenceAlarmButton()
 {
   if (digitalRead(SILENCE_ALARM_BUTTON) == LOW)
   {
+    beep();
     silence_alarm = true;
     buzzerAlarmON = false;
     writeDataLoger("Silence Alarm,");
@@ -2115,6 +2263,7 @@ void checkModePageButton()
 {
   if (digitalRead(MODE_BUTTON) == LOW && displayDim == false && settingMode == false)
   {
+    beep();
     read = false;
     buttonState++;
     count = 0;
@@ -2176,6 +2325,7 @@ void readResetButton()
 {
   if (digitalRead(RESET_BUTTON) == LOW)
   {
+    beep();
     if (displayDim == true)
     {
       displayOn();
@@ -2310,6 +2460,9 @@ void setup()
   lcd.createChar(1, engineChar1);
   lcd.createChar(2, upChar);
   lcd.createChar(3, downChar);
+  lcd.createChar(4, spkChar);
+  lcd.createChar(5, soundChar);
+  lcd.createChar(6, muteChar);
 
   lcd.backlight();
   lcd.clear();
