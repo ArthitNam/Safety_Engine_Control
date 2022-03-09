@@ -186,6 +186,15 @@ byte muteChar[8] = {
     B01010,
     B10001,
     B00000};
+byte enterChar[8] = {
+    B00000,
+    B00001,
+    B00101,
+    B01101,
+    B11111,
+    B01100,
+    B00100,
+    B00000};
 
 void writeDataLoger(String event)
 {
@@ -853,7 +862,12 @@ void updateMenu()
   case 0:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Out");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(" Over Temp:");
     lcd.print(overTemp);
@@ -873,7 +887,12 @@ void updateMenu()
   case 1:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(">Over Temp:");
     lcd.print(overTemp);
@@ -891,7 +910,12 @@ void updateMenu()
   case 2:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(" Over Temp:");
     lcd.print(overTemp);
@@ -909,7 +933,12 @@ void updateMenu()
   case 3:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(" Over Temp:");
     lcd.print(overTemp);
@@ -927,7 +956,12 @@ void updateMenu()
   case 4:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(">");
     lcd.write(0);
@@ -943,7 +977,12 @@ void updateMenu()
   case 5:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(" ");
     lcd.write(0);
@@ -959,7 +998,12 @@ void updateMenu()
   case 6:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(" ");
     lcd.write(0);
@@ -975,7 +1019,12 @@ void updateMenu()
   case 7:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(">Remove All History ");
     lcd.setCursor(0, 2);
@@ -993,7 +1042,12 @@ void updateMenu()
   case 8:
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Set");
+    lcd.write(7);
     lcd.setCursor(0, 1);
     lcd.print(" Remove All History ");
     lcd.setCursor(0, 2);
@@ -2088,7 +2142,13 @@ void page4()
   {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("  Systems  Setting  ");
+    lcd.print("SETTING Sys. ");
+    lcd.write(2);
+    lcd.write(3);
+    lcd.print(" ");
+    lcd.print("Out");
+    lcd.write(7);
+
     lcd.setCursor(0, 1);
     lcd.print(" Over Temp:");
     lcd.print(overTemp);
@@ -2405,6 +2465,7 @@ void setup()
   lcd.createChar(4, spkChar);
   lcd.createChar(5, soundChar);
   lcd.createChar(6, muteChar);
+  lcd.createChar(7, enterChar);
 
   lcd.backlight();
   lcd.clear();
@@ -2426,7 +2487,7 @@ void setup()
   pinMode(RESET_BUTTON, INPUT_PULLUP);
   pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
   pinMode(DISABLE_SW, INPUT_PULLUP); // Sw Armed-Disable
-  // Button INPUT_PULLUP ใช้เฉพาะ Simulator**
+  // Software INPUT_PULLUP ใช้เฉพาะ Simulator**
   pinMode(FLOW_SW, INPUT_PULLUP);     // Flow Sw ระบบหล่อเย็น Narmal Close
   pinMode(OIL_PRES_SW, INPUT_PULLUP); // Oil Pressor ON=12/24V.
   pinMode(WATER_TANK, INPUT_PULLUP);  // เช็คระดับน้ำในบ่อ Normal Close
