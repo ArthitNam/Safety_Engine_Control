@@ -21,18 +21,21 @@
 #include <SPI.h>
 #include "Max6675.h"
 
+// define Pin For Input-Output(mega2560)
+// input
 #define FLOW_SW 14
 #define OIL_PRES_SW 19
 #define WATER_TANK 12
+#define FIREPUMP_ACC 44
+#define PULSEPIN 18
+// Oututput
 #define LED_YELLOW 15
 #define LED_SHUTOFF 16
 #define LED_DISABLE 22
 #define BUZZER_PIN 17
 #define BELL_PIN 42
 #define ENGINE_RELAY_SHUTOFF 43
-#define FIREPUMP_ACC 44
-#define PULSEPIN 18
-
+// Button
 #define RESET_BUTTON 36
 #define UP_BUTTON 38
 #define DOWN_BUTTON 39
@@ -41,53 +44,28 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
-// Read RPM
-const byte PulsesPerRevolution = 18;
-const unsigned long ZeroTimeout = 100000;
-const byte numReadings = 2;
-volatile unsigned long LastTimeWeMeasured;
-volatile unsigned long PeriodBetweenPulses = ZeroTimeout + 1000;
-volatile unsigned long PeriodAverage = ZeroTimeout + 1000;
-unsigned long FrequencyRaw;
-unsigned long FrequencyReal;
-unsigned long RPM;
-unsigned int PulseCounter = 1;
-unsigned long PeriodSum;
-unsigned long LastTimeCycleMeasure = LastTimeWeMeasured;
-unsigned long CurrentMicros = micros();
-unsigned int AmountOfReadings = 1;
-unsigned int ZeroDebouncingExtra;
-unsigned long readings[numReadings];
-unsigned long readIndex;
-unsigned long total;
-unsigned long average;
-///////////////////////////////////////////////////////////////
-
 Max6675 ts(4, 5, 6);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
+const int chipSelect = 53; // CS SD Spi
 
 String passwd;
 Password password = Password("1234");
 String newPasswordString = "";
 char newPassword[5]; // charater string of newPasswordString
-
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
 unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
-unsigned long last1 = 0,
-              last2 = 0, last3 = 0, last4 = 0, last5, last6;
+unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6;
 unsigned long waterTankFalut_verify = 15000;
 unsigned long coolingfalut_verify = 5000;
 unsigned long coolingfalut_delay;
 unsigned long dimTime;
 unsigned long pageOtherTime = 60000;
 unsigned long engineRunTime;
-
 bool engineShutOff = false;
 bool goodDateTime;
-bool testSw = false;
 bool armedSw = false;
 bool engineRun = false;
 bool engineStart = false;
@@ -120,8 +98,31 @@ unsigned long engineRPM;
 bool powerOff = false;
 unsigned long lastmillis = 0;
 bool changePasswordDone = false;
-
+// Read RPM
+const byte PulsesPerRevolution = 18;
+const unsigned long ZeroTimeout = 100000;
+const byte numReadings = 2;
+volatile unsigned long LastTimeWeMeasured;
+volatile unsigned long PeriodBetweenPulses = ZeroTimeout + 1000;
+volatile unsigned long PeriodAverage = ZeroTimeout + 1000;
+unsigned long FrequencyRaw;
+unsigned long FrequencyReal;
+unsigned long RPM;
+unsigned int PulseCounter = 1;
+unsigned long PeriodSum;
+unsigned long LastTimeCycleMeasure = LastTimeWeMeasured;
+unsigned long CurrentMicros = micros();
+unsigned int AmountOfReadings = 1;
+unsigned int ZeroDebouncingExtra;
+unsigned long readings[numReadings];
+unsigned long readIndex;
+unsigned long total;
+unsigned long average;
+/////////////////////
 RTC_DS3231 rtc;
+File myFile;
+void excuteAction(void);
+
 byte engineChar0[8] = {
     B01111,
     B00011,
@@ -186,18 +187,12 @@ byte muteChar[8] = {
     B10001,
     B00000};
 
-File myFile; // สร้างออฟเจก File สำหรับจัดการข้อมูล
-const int chipSelect = 53;
-
-void excuteAction(void);
 void writeDataLoger(String event)
 {
   myFile = SD.open("data.txt", FILE_WRITE); // เปิดไฟล์เพื่อเขียนข้อมูล โหมด FILE_WRITE
-  // ถ้าเปิดไฟล์สำเร็จ ให้เขียนข้อมูลเพิ่มลงไป
   if (myFile)
   {
     DateTime now = rtc.now();
-
     Serial.print("Writing to SD Card ");
     myFile.print(event); // สั่งให้เขียนข้อมูล
     myFile.print(now.day());
@@ -224,7 +219,7 @@ void writeDataLoger(String event)
     }
     myFile.println(now.second());
 
-    myFile.close(); // ปิดไฟล์
+    myFile.close(); // ปิดไฟล์หลังเขียนเสร็จทุกครั้ง
     Serial.println("done.");
   }
   else
@@ -242,12 +237,10 @@ void writeDataLoger(String event)
     // อ่านข้อมูลทั้งหมดออกมา
     while (myFile.available())
     {
-      // Serial.write(myFile.read());
       historyCount++;
       Serial.print(historyCount);
       Serial.print(" ");
       buffer = myFile.readStringUntil('\n');
-
       Serial.println(buffer); // Printing for debugging purpose
     }
     myFile.close(); // เมื่ออ่านเสร็จ ปิดไฟล์
@@ -265,7 +258,6 @@ void verifySD()
 {
   pinMode(SS, OUTPUT);
   Serial.print("Initializing SD card...");
-
   if (!SD.begin(chipSelect))
   {
     Serial.println("initialization failed!");
@@ -278,8 +270,6 @@ void verifySD()
   lcd.setCursor(0, 2); //
   lcd.print("   SD Card is OK    ");
   delay(1000);
-
-  // SD.remove("data.txt");
 }
 void writeStringToEEPROM(int addrOffset, const String &strToWrite)
 {
@@ -298,7 +288,7 @@ String readStringFromEEPROM(int addrOffset)
   {
     data[i] = EEPROM.read(addrOffset + 1 + i);
   }
-  data[newStrLen] = '\0'; // !!! NOTE !!! Remove the space between the slash "/" and "0" (I've added a space because otherwise there is a display bug)
+  data[newStrLen] = '\0'; // !!! NOTE !!! Remove the space between
   return String(data);
 }
 void readEeprom()
@@ -420,13 +410,11 @@ void displayOn()
 void showTimeNow()
 {
   DateTime now = rtc.now();
-
   Serial.print(now.day());
   Serial.print("-");
   Serial.print(now.month());
   Serial.print("-");
   Serial.println(now.year());
-
   Serial.print(now.hour());
   Serial.print(":");
   Serial.print(now.minute());
@@ -467,6 +455,7 @@ void buzzerAlarm()
     if (engineShutOff == false)
     {
       noTone(BUZZER_PIN);
+      digitalWrite(BELL_PIN, LOW);
     }
   }
 }
@@ -489,7 +478,6 @@ void cooling_fault()
     countDown--;
     Serial.println(countDown);
     last6 = millis();
-
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("COOLING SYSTEM FALUT");
@@ -542,7 +530,6 @@ void engineOverTemp()
     countDown--;
     Serial.println(countDown);
     last6 = millis();
-
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("! ENGINE OVER TEMP !");
@@ -569,7 +556,6 @@ void engineOverTemp()
     lcd.print("     OVER  TEMP     ");
     lcd.setCursor(0, 2);
     lcd.print(" ! ENGINE SHUTOFF ! ");
-
     tone(BUZZER_PIN, 800, 0);
     digitalWrite(BELL_PIN, HIGH);
     digitalWrite(LED_SHUTOFF, HIGH);
@@ -583,9 +569,7 @@ void waterTank_fault()
   digitalWrite(LED_YELLOW, HIGH);
   if (showDisplay == true)
   {
-    // Serial.println("Water Tank Low");
     silenceAlarmReset();
-
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
@@ -659,7 +643,6 @@ void readCoolSys()
     {
       coolSys = newCoolSys;
       showDisplay = true;
-      // buzzerAlarmON = true;
     }
   }
   if (digitalRead(FLOW_SW) == HIGH)
@@ -669,7 +652,6 @@ void readCoolSys()
     {
       coolSys = newCoolSys;
       showDisplay = true;
-      // buzzerAlarmON = false;
     }
   }
   if (coolSys == false && engineRun == true)
@@ -758,9 +740,7 @@ void checkEngineRun()
     readIndex = 0;
   }
   average = total / numReadings;
-
   // frequency = 4000;
-
   if (millis() - lastmillis >= 500 && RPM > 0)
   {
     Serial.print("Period: ");
@@ -773,7 +753,6 @@ void checkEngineRun()
     Serial.print(RPM);
     Serial.print("\tTachometer: ");
     Serial.println(average);
-
     lastmillis = millis(); // Update lastmillis
   }
   if (RPM >= engineRPM)
@@ -803,7 +782,6 @@ void checkEngineRun()
       showDisplay = true;
     }
   }
-
   currentMillis1 = millis();
   if (engineRun == true)
   {
@@ -813,7 +791,6 @@ void checkEngineRun()
       engineStart = true;
     }
     countSec = ((currentMillis1 - previousMillis1) / 1000);
-
     // Serial.print("countSec = ");
     // Serial.println(countSec);
   }
@@ -1051,7 +1028,6 @@ void history()
         lcd.print("Reading Data...     ");
         lcd.setCursor(0, 2);
         lcd.print("From SD Card        ");
-        // delay(500);
       }
 
       if (count != 0)
@@ -1073,13 +1049,10 @@ void history()
             buffer = myFile.readStringUntil('\n');
             Serial.print("read = ");
             Serial.println(buffer);
-
             buffer.setCharAt(buffer.length() - 1, ' ');
-
             lcd.clear();
             lcd.setCursor(0, 0);
             lcd.print("  History ");
-
             lcd.setCursor(0, 3);
             lcd.write(2);
             lcd.setCursor(19, 3);
@@ -1088,19 +1061,15 @@ void history()
             char buff[16];
             sprintf(buff, "(%d/%d)", count, historyCount);
             lcd.print(buff);
-
             lcd.setCursor(0, 1);
             char str[64];
             strcpy(str, buffer.c_str());
-
             constexpr const char *delim = ",";
             char *token;
             token = strtok(str, delim);
             lcd.print(token);
-
             while (token != NULL)
             {
-              // Serial.println(token);
               token = strtok(NULL, delim);
               lcd.setCursor(0, 2);
               lcd.print(token);
@@ -1154,7 +1123,6 @@ void history()
         Serial.print("History Count = ");
         Serial.println(historyCount);
         Serial.println("---------------------------------");
-
         count = 1;
         read = true;
         showDisplay = true;
@@ -1213,7 +1181,6 @@ void setOverTemp()
   lcd.print(overTemp);
   lcd.print(" C");
   lcd.print((char)223);
-
   delay(1000);
   while (!exit)
   {
@@ -1333,7 +1300,6 @@ void setDimTime()
   lcd.setCursor(8, 2);
   lcd.print(dimTime);
   lcd.print(" Minute");
-
   delay(1000);
   while (!exit)
   {
@@ -1449,7 +1415,6 @@ void enterPassword()
   int cursor = 5;
   int oldCursor;
   int currentDigit = 0;
-
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("   Enter Password   ");
@@ -1460,7 +1425,6 @@ void enterPassword()
   delay(500);
   lcd.setCursor(cursor, 1);
   lcd.blink();
-
   while (!password.evaluate())
   {
     if (!digitalRead(DOWN_BUTTON))
@@ -1516,7 +1480,7 @@ void enterPassword()
 
     if (!digitalRead(MODE_BUTTON))
     {
-      //beep();
+      // beep();
       if (cursor == 5)
       {
         password.append('0');
@@ -1636,7 +1600,6 @@ void changePassword()
   int cursor = 5;
   int oldCursor;
   int currentDigit = 0;
-
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(" Enter New Password ");
@@ -1647,7 +1610,6 @@ void changePassword()
   delay(500);
   lcd.setCursor(cursor, 1);
   lcd.blink();
-
   while (!changePasswordDone)
   {
     if (!digitalRead(DOWN_BUTTON))
@@ -1760,7 +1722,6 @@ void changePassword()
           writeStringToEEPROM(50, newPasswordString);
           Serial.print("Password changed to ");
           Serial.println(newPassword);
-
           lcd.setCursor(0, 2);
           lcd.print("   Change Password  ");
           changePasswordDone = true;
@@ -1818,7 +1779,6 @@ void removeAllHistory()
       {
         state = 0;
       }
-
       delay(200);
       while (!digitalRead(DOWN_BUTTON))
         ;
@@ -1887,7 +1847,6 @@ void setNoBeep()
     lcd.print("        No          ");
   }
   delay(1000);
-
   while (!exit)
   {
     if (!digitalRead(UP_BUTTON))
@@ -1979,7 +1938,6 @@ void page1()
   if (showDisplay == true)
   {
     Serial.println("show Display");
-
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("ENGINE :");
@@ -1994,7 +1952,6 @@ void page1()
     lcd.print(temp, 1);
     lcd.print(" C");
     lcd.print((char)223);
-
     if (engineRun == true)
     {
       lcd.setCursor(9, 0);
@@ -2005,7 +1962,6 @@ void page1()
       lcd.setCursor(9, 0);
       lcd.print("STOP");
     }
-
     if (oilPress == true)
     {
       lcd.setCursor(14, 1);
@@ -2016,7 +1972,6 @@ void page1()
       lcd.setCursor(14, 1);
       lcd.print("LOW");
     }
-
     if (coolSys == true)
     {
       lcd.setCursor(14, 2);
@@ -2044,7 +1999,6 @@ void page1()
 void page2()
 {
   DateTime now = rtc.now();
-
   if (showDisplay == true)
   {
     lcd.clear();
@@ -2082,7 +2036,6 @@ void page2()
     lcd.print("H");
     lcd.print(countMin);
     lcd.print("M");
-
     showDisplay = false;
   }
   if (waterTank == false)
@@ -2149,7 +2102,6 @@ void page4()
     lcd.print(" Sleep Mode:");
     lcd.print(dimTime);
     lcd.print(" M.");
-
     showDisplay = false;
   }
   if (!digitalRead(DOWN_BUTTON))
@@ -2162,10 +2114,7 @@ void page4()
     {
       menu = 0;
     }
-
     updateMenu();
-
-    // showDisplay = true;
     last4 = millis();
     last5 = millis();
     delay(200);
@@ -2182,8 +2131,6 @@ void page4()
       menu = 8;
     }
     updateMenu();
-
-    // showDisplay = true;
     last4 = millis();
     last5 = millis();
     delay(200);
@@ -2195,7 +2142,6 @@ void page4()
     beep();
     excuteAction();
     updateMenu();
-
     last4 = millis();
     last5 = millis();
     delay(200);
@@ -2234,7 +2180,6 @@ void readTemp()
   {
     temp = 0;
   }
-
   if (temp >= overTemp)
   {
     bool newOverTemp = true;
@@ -2297,7 +2242,6 @@ void checkModePageButton()
     page = 4;
     page4();
   }
-
   if (digitalRead(UP_BUTTON) == LOW || digitalRead(DOWN_BUTTON) == LOW || digitalRead(MODE_BUTTON) == LOW || showDisplay == true)
   {
     last4 = millis();
@@ -2359,7 +2303,6 @@ void readAcc()
     noTone(BUZZER_PIN);
     writeDataLoger("Firepump Reset,");
     delay(5000);
-
     wdt_enable(WDTO_15MS);
     while (1)
     {
@@ -2368,7 +2311,6 @@ void readAcc()
 }
 void Pulse_Event() // The interrupt runs this to calculate the period between pulses:
 {
-
   PeriodBetweenPulses = micros() - LastTimeWeMeasured; // Current "micros" minus the old "micros" when the last pulse happens.
                                                        // This will result with the period (microseconds) between both pulses.
                                                        // The way is made, the overflow of the "micros" is not going to cause any issue.
