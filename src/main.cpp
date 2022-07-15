@@ -2,7 +2,6 @@
    Safety Engine Control (PT&E) **พี่อมร
    By Arthit_N ... Tel.0959058972  E-Mail:tgbroadcast@gmail.com
    Kickoff 26/01/2022
-   Ver.  0.9.0
    put on github 26/01/2022
 */
 //**Mega : MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 53(pinMode OUTPUT**)
