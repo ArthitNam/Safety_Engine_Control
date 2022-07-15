@@ -19,7 +19,7 @@
 #include <string.h>
 #include <Password.h>
 #include <SPI.h>
-#include "Max6675.h"
+#include <max6675.h>
 
 // define Pin For Input-Output(mega2560)
 // input
@@ -44,7 +44,11 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
-Max6675 ts(4, 5, 6);
+int thermoDO = 4;
+int thermoCS = 5;
+int thermoCLK = 6;
+
+MAX6675 thermocouple(thermoCLK, thermoCS, thermoDO);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 const int chipSelect = 53; // CS SD Spi
 
@@ -52,6 +56,8 @@ String passwd;
 Password password = Password("1234");
 String newPasswordString = "";
 char newPassword[5]; // charater string of newPasswordString
+const unsigned long measurementPeriod = 1000;
+unsigned long timer;
 unsigned long previousMillis = 0;
 unsigned long previousMillis1 = 0;
 unsigned long currentMillis;
@@ -85,7 +91,7 @@ bool buzzerAlarmON = false;
 bool reset = false;
 bool noBeep = false;
 int page = 1;
-float temp = 35.0;
+int temp,newTemp;
 int overTemp;
 int historyCount = 0;
 String buffer;
@@ -464,7 +470,7 @@ void buzzerAlarm()
     if (engineShutOff == false)
     {
       noTone(BUZZER_PIN);
-      digitalWrite(BELL_PIN, LOW);
+      digitalWrite(BELL_PIN, HIGH);
     }
   }
 }
@@ -568,7 +574,7 @@ void engineOverTemp()
     tone(BUZZER_PIN, 800, 0);
     digitalWrite(BELL_PIN, HIGH);
     digitalWrite(LED_SHUTOFF, HIGH);
-    digitalWrite(ENGINE_RELAY_SHUTOFF, HIGH);
+    digitalWrite(ENGINE_RELAY_SHUTOFF, LOW);
     writeDataLoger("Engine ShutOFF,");
     engineShutOff = true;
   }
@@ -1066,7 +1072,7 @@ void updateMenu()
 }
 void history()
 {
-  unsigned int position[2000];
+  unsigned int position[500];
   bool exit = false;
   delay(200);
   while (!exit)
@@ -2041,7 +2047,20 @@ void page1()
       lcd.setCursor(14, 2);
       lcd.print("FAULT");
     }
+    
     showDisplay = false;
+  }
+  if (newTemp != temp)
+  {
+    temp = newTemp;
+    //Serial.println(temp);
+    lcd.setCursor(0, 3);
+    lcd.write(0);
+    lcd.write(1);
+    lcd.print(" TEMP:");
+    lcd.print(temp, 1);
+    lcd.print(" C");
+    lcd.print((char)223);
   }
   if (displayDim == false && millis() - last4 >= (dimTime * 60000))
   {
@@ -2124,12 +2143,18 @@ void page2()
 }
 void page3()
 {
+  
   if (showDisplay == true)
   {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("ENGINE RPM :");
     lcd.print(RPM);
+    lcd.setCursor(0, 1);
+    lcd.print("Ambient TEMP :");
+    lcd.print(rtc.getTemperature(),0.1);
+    lcd.print(" C");
+    lcd.print((char)223);
     showDisplay = false;
   }
   lcd.print("     ");
@@ -2229,30 +2254,32 @@ void readSilenceAlarmButton()
 }
 void readTemp()
 {
-  // tempFault = true;
-  float newTemp = ts.getCelsius();
-  if (newTemp != temp)
+  if (millis() - timer >= measurementPeriod)
   {
-    temp = newTemp;
-    showDisplay = true;
-  }
-  if (temp < 0)
-  {
-    temp = 0;
-  }
-  if (temp >= overTemp)
-  {
-    bool newOverTemp = true;
-    if (newOverTemp != tempFault)
+    timer += measurementPeriod;
+    // tempFault = true;
+    newTemp = thermocouple.readCelsius();
+    //delay(500);
+    
+    // if (temp < 0)
+    // {
+    //   temp = 0;
+    // }
+    if (temp >= overTemp)
     {
-      tempFault = newOverTemp;
-      showDisplay = true;
-      buzzerAlarmON = true;
-      last6 = millis();
+      bool newOverTemp = true;
+      if (newOverTemp != tempFault)
+      {
+        tempFault = newOverTemp;
+        showDisplay = true;
+        buzzerAlarmON = true;
+        last6 = millis();
+      }
+      page = 0;
+      engineOverTemp();
     }
-    page = 0;
-    engineOverTemp();
   }
+  
   // if (temp < overTemp)
   // {
   //   bool newOverTemp = false;
@@ -2452,6 +2479,34 @@ void checkPowerOff()
 }
 void setup()
 {
+  // Button INPUT_PULLUP ใช้เฉพาะ Simulator**
+  pinMode(UP_BUTTON, INPUT);
+  pinMode(DOWN_BUTTON, INPUT);
+  pinMode(MODE_BUTTON, INPUT);
+  pinMode(ABORT_BUTTON, INPUT);
+  pinMode(RESET_BUTTON, INPUT);
+  pinMode(SILENCE_ALARM_BUTTON, INPUT);
+  pinMode(DISABLE_SW, INPUT); // Sw Armed-Disable
+  // Software INPUT_PULLUP ใช้เฉพาะ Simulator**
+  pinMode(FLOW_SW, INPUT);      // Flow Sw ระบบหล่อเย็น Narmal Close
+  pinMode(OIL_PRES_SW, INPUT);  // Oil Pressor ON=12/24V.
+  pinMode(WATER_TANK, INPUT);   // เช็คระดับน้ำในบ่อ Normal Close
+  pinMode(FIREPUMP_ACC, INPUT); // ไฟจากตู้ FIREPUMP ACC
+  pinMode(PULSEPIN, INPUT);
+
+  pinMode(LED_YELLOW, OUTPUT);           // LED Fault
+  pinMode(LED_SHUTOFF, OUTPUT);          // LED ShutOFF
+  pinMode(LED_DISABLE, OUTPUT);          // LED Disable-Armed
+  pinMode(BUZZER_PIN, OUTPUT);           // Buzzer Alarm
+  pinMode(BELL_PIN, OUTPUT);             // Bell Alarm
+  pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF
+
+  pinMode(chipSelect, OUTPUT);
+  analogReference(INTERNAL1V1);                                    // เลือกใช้แรงดันอ้างอิงจากภายใน 1.1V
+  attachInterrupt(digitalPinToInterrupt(18), Pulse_Event, RISING); // Enable interrupt LOW to HIGH.
+
+  digitalWrite(BELL_PIN, HIGH);
+  digitalWrite(ENGINE_RELAY_SHUTOFF, HIGH);
   Serial.begin(115200);
   Serial.println("---------------------");
   Serial.println("Safety Engine Control");
@@ -2479,31 +2534,7 @@ void setup()
   lcd.print("--------------------");
   delay(500);
 
-  // Button INPUT_PULLUP ใช้เฉพาะ Simulator**
-  pinMode(UP_BUTTON, INPUT_PULLUP);
-  pinMode(DOWN_BUTTON, INPUT_PULLUP);
-  pinMode(MODE_BUTTON, INPUT_PULLUP);
-  pinMode(ABORT_BUTTON, INPUT_PULLUP);
-  pinMode(RESET_BUTTON, INPUT_PULLUP);
-  pinMode(SILENCE_ALARM_BUTTON, INPUT_PULLUP);
-  pinMode(DISABLE_SW, INPUT_PULLUP); // Sw Armed-Disable
-  // Software INPUT_PULLUP ใช้เฉพาะ Simulator**
-  pinMode(FLOW_SW, INPUT_PULLUP);     // Flow Sw ระบบหล่อเย็น Narmal Close
-  pinMode(OIL_PRES_SW, INPUT_PULLUP); // Oil Pressor ON=12/24V.
-  pinMode(WATER_TANK, INPUT_PULLUP);  // เช็คระดับน้ำในบ่อ Normal Close
-  pinMode(FIREPUMP_ACC, INPUT);       // ไฟจากตู้ FIREPUMP ACC
-  pinMode(PULSEPIN, INPUT);
-
-  pinMode(LED_YELLOW, OUTPUT);           // LED Fault
-  pinMode(LED_SHUTOFF, OUTPUT);          // LED ShutOFF
-  pinMode(LED_DISABLE, OUTPUT);          // LED Disable-Armed
-  pinMode(BUZZER_PIN, OUTPUT);           // Buzzer Alarm
-  pinMode(BELL_PIN, OUTPUT);             // Bell Alarm
-  pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF
-
-  pinMode(chipSelect, OUTPUT);
-  analogReference(INTERNAL1V1);                                    // เลือกใช้แรงดันอ้างอิงจากภายใน 1.1V
-  attachInterrupt(digitalPinToInterrupt(18), Pulse_Event, RISING); // Enable interrupt LOW to HIGH.
+ 
 
   // Test LED Boot
   digitalWrite(LED_YELLOW, HIGH);
@@ -2523,8 +2554,9 @@ void setup()
   digitalWrite(LED_DISABLE, LOW);
 
   readEeprom();
+  timer = millis();
 
-  ts.setOffset(97);
+  //ts.setOffset(0);
   // set offset for temperature measurement.
   // 1 stannds for 0.25 Celsius
 
@@ -2543,7 +2575,7 @@ void setup()
     Serial.println("Date Time is OK");
     delay(1000);
   }
-  rtc.adjust(DateTime(__DATE__, __TIME__)); // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
+  //rtc.adjust(DateTime(__DATE__, __TIME__)); // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
   showTimeNow();
   verifySD();
   writeDataLoger("Power ON,");
@@ -2558,7 +2590,7 @@ void setup()
 }
 void loop()
 {
-  // readTemp();
+  readTemp();
   readWaterTank();
   readOilPressSw();
   readCoolSys();
