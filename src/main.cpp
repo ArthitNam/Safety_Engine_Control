@@ -1259,7 +1259,7 @@ void setOverTemp()
       lcd.print(" C");
       lcd.print((char)223);
       delay(200);
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(UP_BUTTON))
         ;
     }
     if (!digitalRead(DOWN_BUTTON))
@@ -1286,7 +1286,7 @@ void setOverTemp()
       beep();
       EEPROM.put(10, overTemp);
       break;
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(MODE_BUTTON))
         ;
     }
   }
@@ -1319,7 +1319,7 @@ void setCoolFault_delay()
       lcd.print(coolingfalut_delay / 1000);
       lcd.print(" Second");
       delay(200);
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(UP_BUTTON))
         ;
     }
     if (!digitalRead(DOWN_BUTTON))
@@ -1345,7 +1345,7 @@ void setCoolFault_delay()
       beep();
       EEPROM.put(20, coolingfalut_delay);
       break;
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(MODE_BUTTON))
         ;
     }
   }
@@ -1377,7 +1377,7 @@ void setDimTime()
       lcd.print(dimTime);
       lcd.print(" Minute");
       delay(200);
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(UP_BUTTON))
         ;
     }
     if (!digitalRead(DOWN_BUTTON))
@@ -1404,7 +1404,7 @@ void setDimTime()
       beep();
       EEPROM.put(30, dimTime);
       break;
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(MODE_BUTTON))
         ;
     }
   }
@@ -1437,7 +1437,7 @@ void setEngineRpm()
       lcd.print(engineRPM);
       lcd.print(" RPM");
       delay(200);
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(UP_BUTTON))
         ;
     }
     if (!digitalRead(DOWN_BUTTON))
@@ -1464,7 +1464,7 @@ void setEngineRpm()
       beep();
       EEPROM.put(40, engineRPM);
       break;
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(MODE_BUTTON))
         ;
     }
   }
@@ -1917,7 +1917,7 @@ void setNoBeep()
         state = 0;
       }
       delay(200);
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(UP_BUTTON))
         ;
     }
     if (!digitalRead(DOWN_BUTTON))
@@ -1948,7 +1948,7 @@ void setNoBeep()
     {
       EEPROM.put(60, noBeep);
       break;
-      while (!digitalRead(DOWN_BUTTON))
+      while (!digitalRead(MODE_BUTTON))
         ;
     }
   }
