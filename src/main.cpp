@@ -90,7 +90,7 @@ bool buzzerAlarmON = false;
 bool reset = false;
 bool noBeep = false;
 int page = 1;
-int temp,newTemp;
+int temp, newTemp;
 int overTemp;
 int historyCount = 0;
 String buffer;
@@ -324,9 +324,9 @@ void readEeprom()
   {
     overTemp = 95;
   }
-  if (coolingfalut_delay < 1000 || coolingfalut_delay > 30000)
+  if (coolingfalut_delay < 0 || coolingfalut_delay > 60)
   {
-    coolingfalut_delay = 5000;
+    coolingfalut_delay = 15;
   }
   if (dimTime < 1 || dimTime > 30)
   {
@@ -353,7 +353,7 @@ void readEeprom()
   Serial.print("Over Temp = ");
   Serial.println(overTemp);
   Serial.print("Cooling Fault Delay = ");
-  Serial.print(coolingfalut_delay / 1000);
+  Serial.print(coolingfalut_delay);
   Serial.println(" S.");
   Serial.print("Dimer LCD Time = ");
   Serial.print(dimTime);
@@ -675,13 +675,13 @@ void readCoolSys()
       last2 = millis();
       cooling_fault_delay_start = true;
     }
-    if (cooling_fault_delay_start == true && millis() - last2 < coolingfalut_delay)
+    if (cooling_fault_delay_start == true && millis() - last2 < coolingfalut_delay * 1000)
     {
       Serial.print("Start Delay Cooling-Fault  ");
       Serial.println((millis() - last2) / 1000);
     }
 
-    if (millis() - last2 > coolingfalut_delay)
+    if (millis() - last2 > coolingfalut_delay * 1000)
     {
       if (cooling_fault_verify_start == false)
       {
@@ -880,7 +880,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(coolingfalut_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -905,7 +905,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(coolingfalut_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -928,7 +928,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(">Cool'F Delay:");
-    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(coolingfalut_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -951,7 +951,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(coolingfalut_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(">Sleep Mode:");
@@ -1298,7 +1298,7 @@ void setCoolFault_delay()
   lcd.setCursor(0, 0);
   lcd.print(" Cooling Fault Delay");
   lcd.setCursor(6, 2);
-  lcd.print(coolingfalut_delay / 1000);
+  lcd.print(coolingfalut_delay);
   lcd.print(" Second");
 
   delay(1000);
@@ -1307,16 +1307,16 @@ void setCoolFault_delay()
     if (!digitalRead(UP_BUTTON))
     {
       beep();
-      coolingfalut_delay = coolingfalut_delay + 1000;
-      if (coolingfalut_delay > 30000)
+      coolingfalut_delay = coolingfalut_delay + 1;
+      if (coolingfalut_delay > 60)
       {
-        coolingfalut_delay = 1000;
+        coolingfalut_delay = 0;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Cooling Fault Delay");
       lcd.setCursor(6, 2);
-      lcd.print(coolingfalut_delay / 1000);
+      lcd.print(coolingfalut_delay);
       lcd.print(" Second");
       delay(200);
       while (!digitalRead(UP_BUTTON))
@@ -1325,16 +1325,16 @@ void setCoolFault_delay()
     if (!digitalRead(DOWN_BUTTON))
     {
       beep();
-      coolingfalut_delay = coolingfalut_delay - 1000;
-      if (coolingfalut_delay < 1000)
+      coolingfalut_delay = coolingfalut_delay - 1;
+      if (coolingfalut_delay < 0)
       {
-        coolingfalut_delay = 30000;
+        coolingfalut_delay = 60;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Cooling Fault Delay");
       lcd.setCursor(6, 2);
-      lcd.print(coolingfalut_delay / 1000);
+      lcd.print(coolingfalut_delay);
       lcd.print(" Second");
       delay(200);
       while (!digitalRead(DOWN_BUTTON))
@@ -2046,13 +2046,13 @@ void page1()
       lcd.setCursor(14, 2);
       lcd.print("FAULT");
     }
-    
+
     showDisplay = false;
   }
   if (newTemp != temp)
   {
     temp = newTemp;
-    //Serial.println(temp);
+    // Serial.println(temp);
     lcd.setCursor(0, 3);
     lcd.write(0);
     lcd.write(1);
@@ -2142,7 +2142,7 @@ void page2()
 }
 void page3()
 {
-  
+
   if (showDisplay == true)
   {
     lcd.clear();
@@ -2151,7 +2151,7 @@ void page3()
     lcd.print(RPM);
     lcd.setCursor(0, 1);
     lcd.print("Ambient TEMP :");
-    lcd.print(rtc.getTemperature(),0.1);
+    lcd.print(rtc.getTemperature(), 0.1);
     lcd.print(" C");
     lcd.print((char)223);
     showDisplay = false;
@@ -2180,7 +2180,7 @@ void page4()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay / 1000);
+    lcd.print(coolingfalut_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -2258,8 +2258,8 @@ void readTemp()
     timer += measurementPeriod;
     // tempFault = true;
     newTemp = thermocouple.readCelsius();
-    //delay(500);
-    
+    // delay(500);
+
     // if (temp < 0)
     // {
     //   temp = 0;
@@ -2278,7 +2278,7 @@ void readTemp()
       engineOverTemp();
     }
   }
-  
+
   // if (temp < overTemp)
   // {
   //   bool newOverTemp = false;
@@ -2533,8 +2533,6 @@ void setup()
   lcd.print("--------------------");
   delay(500);
 
- 
-
   // Test LED Boot
   digitalWrite(LED_YELLOW, HIGH);
   digitalWrite(LED_SHUTOFF, HIGH);
@@ -2555,9 +2553,9 @@ void setup()
   readEeprom();
   timer = millis();
 
-  //ts.setOffset(0);
-  // set offset for temperature measurement.
-  // 1 stannds for 0.25 Celsius
+  // ts.setOffset(0);
+  //  set offset for temperature measurement.
+  //  1 stannds for 0.25 Celsius
 
   if (!rtc.begin())
   {
@@ -2574,7 +2572,7 @@ void setup()
     Serial.println("Date Time is OK");
     delay(1000);
   }
-  //rtc.adjust(DateTime(__DATE__, __TIME__)); // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
+  // rtc.adjust(DateTime(__DATE__, __TIME__)); // ตั้งค่าเวลาให้ตรงกับคอมพิวเตอร์
   showTimeNow();
   verifySD();
   writeDataLoger("Power ON,");
