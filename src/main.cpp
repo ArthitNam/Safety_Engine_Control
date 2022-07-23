@@ -826,7 +826,7 @@ void readCoolSys()
       }
     }
   }
-  if (coolSys == false && engineRun == false && cooling_fault_delay_start == true)
+  if (cooling_fault == true && engineRun == false && cooling_fault_delay_start == true)
   {
     last2 = 0;
     last3 = 0;
@@ -2159,10 +2159,10 @@ void page1()
       lcd.setCursor(14, 2);
       lcd.print("LOW");
     }
-    if (cooling_fault == true && engineRun == true)
+    if (cooling_fault == true && engineRun == true && coolSys == false)
     {
       lcd.setCursor(14, 2);
-      lcd.print("FAULT");
+      lcd.print("FAULT ");
     }
 
     showDisplay = false;
