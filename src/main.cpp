@@ -43,7 +43,7 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
-String version = "0.9.3";  // แก้ไข Version *****
+String version = "0.9.4";  // แก้ไข Version *****
 
 int thermoDO = 4;
 int thermoCS = 5;
@@ -65,11 +65,11 @@ unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
 unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6, last7=0, last8=0,last9;
-unsigned long waterTankFalut_verify = 15000;
-unsigned long oilPressfalut_verify = 10000;
-unsigned long coolingfalut_verify = 5000;
-unsigned long coolingfalut_delay;
-unsigned long oilPressfalut_delay = 1;
+unsigned long waterTankFault_verify = 15000;
+unsigned long oilPressFault_verify = 10000;
+unsigned long coolingFault_verify = 5000;
+unsigned long coolingFault_delay;
+unsigned long oilPressFault_delay = 1;
 unsigned long dimTime;
 unsigned long pageOtherTime = 60000;
 unsigned long engineRunTime;
@@ -80,12 +80,12 @@ bool engineRun = false;
 bool engineStart = false;
 bool coolSys = false;
 bool oilPress = false;
-bool oilPress_falut = false;
+bool oilPress_fault = false;
 bool oilPress_fault_delay_start = false;
 bool oilPress_fault_verify_start = false;
 bool waterTank = false;
 bool warning = false;
-bool cooling_falut = false;
+bool cooling_fault = false;
 bool cooling_fault_delay_start = false;
 bool cooling_fault_verify_start = false;
 bool settingMode = false;
@@ -317,7 +317,7 @@ void readEeprom()
   EEPROM.begin();
   engineRunTime = EEPROM.read(0);
   overTemp = EEPROM.read(10);
-  coolingfalut_delay = EEPROM.read(20);
+  coolingFault_delay = EEPROM.read(20);
   dimTime = EEPROM.read(30);
   engineRPM = EEPROM.read(40);
   passwd = readStringFromEEPROM(50);
@@ -331,9 +331,9 @@ void readEeprom()
   {
     overTemp = 95;
   }
-  if (coolingfalut_delay < 0 || coolingfalut_delay > 60)
+  if (coolingFault_delay < 0 || coolingFault_delay > 60)
   {
-    coolingfalut_delay = 15;
+    coolingFault_delay = 15;
   }
   if (dimTime < 1 || dimTime > 30)
   {
@@ -360,7 +360,7 @@ void readEeprom()
   Serial.print("Over Temp = ");
   Serial.println(overTemp);
   Serial.print("Cooling Fault Delay = ");
-  Serial.print(coolingfalut_delay);
+  Serial.print(coolingFault_delay);
   Serial.println(" S.");
   Serial.print("Dimer LCD Time = ");
   Serial.print(dimTime);
@@ -444,12 +444,11 @@ void showTimeNow()
 }
 void silenceAlarmReset()
 {
-  // bool newsilenceAlarm = false;
-  // if (newsilenceAlarm != silence_alarm)
-  // {
-  //   silence_alarm = newsilenceAlarm;
-  // }
-  silence_alarm = false;
+  bool newsilenceAlarm = false;
+  if (newsilenceAlarm != silence_alarm)
+  {
+    silence_alarm = newsilenceAlarm;
+  }
 }
 void buzzerAlarm()
 {
@@ -481,7 +480,7 @@ void buzzerAlarm()
     }
   }
 }
-void oilPress_fault()
+void oilPressFault()
 {
   digitalWrite(LED_YELLOW, HIGH);
   if (showDisplay == true && silence_alarm == false)
@@ -491,9 +490,9 @@ void oilPress_fault()
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
     lcd.setCursor(0, 2);
-    lcd.print(" OIL PRESSURE FALUT ");
+    lcd.print(" OIL PRESSURE FAULT ");
     showDisplay = false;
-    writeDataLoger("OIL PRESSURE FALUT,");
+    writeDataLoger("OIL PRESSURE FAULT,");
   }
   // if (millis() - last9 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
   // {
@@ -502,7 +501,7 @@ void oilPress_fault()
   //   last9 = millis();
   //   lcd.clear();
   //   lcd.setCursor(0, 0);
-  //   lcd.print(" OILING SYSTEM FALUT");
+  //   lcd.print(" OILING SYSTEM FAULT");
   //   lcd.setCursor(0, 2);
   //   lcd.print(" ShutOFF Countdown !");
   //   lcd.setCursor(7, 3);
@@ -529,7 +528,7 @@ void oilPress_fault()
   //   engineShutOff = true;
   // }
 }
-void cooling_fault()
+void coolingFault()
 {
   digitalWrite(LED_YELLOW, HIGH);
   if (showDisplay == true && silence_alarm == false)
@@ -539,7 +538,7 @@ void cooling_fault()
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
     lcd.setCursor(0, 2);
-    lcd.print("COOLING SYSTEM FALUT");
+    lcd.print("COOLING SYSTEM FAULT");
     showDisplay = false;
     writeDataLoger("Cooling System Fault,");
   }
@@ -550,7 +549,7 @@ void cooling_fault()
     last6 = millis();
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("COOLING SYSTEM FALUT");
+    lcd.print("COOLING SYSTEM FAULT");
     lcd.setCursor(0, 2);
     lcd.print(" ShutOFF Countdown !");
     lcd.setCursor(7, 3);
@@ -567,7 +566,7 @@ void cooling_fault()
     // Shut OFF
     lcd.clear();
     lcd.setCursor(0, 1);
-    lcd.print("COOLING SYSTEM FALUT");
+    lcd.print("COOLING SYSTEM FAULT");
     lcd.setCursor(0, 2);
     lcd.print(" ! ENGINE SHUTOFF ! ");
 
@@ -653,12 +652,12 @@ void readWaterTank()
 {
   if (digitalRead(WATER_TANK) == LOW)
   {
-    if (last1 < waterTankFalut_verify)
+    if (last1 < waterTankFault_verify)
     {
       last1++;
       Serial.println(last1);
     }
-    if (last1 >= waterTankFalut_verify)
+    if (last1 >= waterTankFault_verify)
     {
       bool newWaterTank = true;
       if (newWaterTank != waterTank)
@@ -679,7 +678,7 @@ void readWaterTank()
     {
       waterTank = newWaterTank;
       showDisplay = true;
-      buzzerAlarmON = false;
+      //buzzerAlarmON = false;
     }
   }
 }
@@ -711,36 +710,36 @@ void readOilPressSw()
       last7 = millis();
       oilPress_fault_delay_start = true;
     }
-    if (oilPress_fault_delay_start == true && millis() - last7 < oilPressfalut_delay * 1000)
+    if (oilPress_fault_delay_start == true && millis() - last7 < oilPressFault_delay * 1000)
     {
       //Serial.print("Start Delay oilPress-Fault  ");
       //Serial.println((millis() - last7) / 1000);
     }
 
-    if (millis() - last7 > oilPressfalut_delay * 1000)
+    if (millis() - last7 > oilPressFault_delay * 1000)
     {
       if (oilPress_fault_verify_start == false)
       {
         last8 = millis();
         oilPress_fault_verify_start = true;
       }
-      if (oilPress_fault_verify_start == true && millis() - last8 < oilPressfalut_verify)
+      if (oilPress_fault_verify_start == true && millis() - last8 < oilPressFault_verify)
       {
         //Serial.print("Start verify oilPress-Fault  ");
         //Serial.println((millis() - last8) / 1000);
       }
-      if (millis() - last8 >= oilPressfalut_verify)
+      if (millis() - last8 >= oilPressFault_verify)
       {
         bool newoilPressFault = true;
-        if (newoilPressFault != oilPress_falut)
+        if (newoilPressFault != oilPress_fault)
         {
-          Serial.println("oilPress System Fault !");
-          oilPress_falut = newoilPressFault;
+          Serial.println("OilPress System Fault !");
+          oilPress_fault = newoilPressFault;
           showDisplay = true;
           buzzerAlarmON = true;
           page = 0;
         }
-        oilPress_fault();
+        oilPressFault();
       }
     }
   }
@@ -749,10 +748,10 @@ void readOilPressSw()
     last7 = 0;
     last8 = 0;
     last9 = 0;
-    oilPress_falut = false;
+    oilPress_fault = false;
     oilPress_fault_verify_start = false;
     silence_alarm = false;
-    buzzerAlarmON = false;
+    //buzzerAlarmON = false;
 
     showDisplay = true;
     page = 1;
@@ -788,36 +787,36 @@ void readCoolSys()
       last2 = millis();
       cooling_fault_delay_start = true;
     }
-    if (cooling_fault_delay_start == true && millis() - last2 < coolingfalut_delay * 1000)
+    if (cooling_fault_delay_start == true && millis() - last2 < coolingFault_delay * 1000)
     {
       Serial.print("Start Delay Cooling-Fault  ");
       Serial.println((millis() - last2) / 1000);
     }
 
-    if (millis() - last2 > coolingfalut_delay * 1000)
+    if (millis() - last2 > coolingFault_delay * 1000)
     {
       if (cooling_fault_verify_start == false)
       {
         last3 = millis();
         cooling_fault_verify_start = true;
       }
-      if (cooling_fault_verify_start == true && millis() - last3 < coolingfalut_verify)
+      if (cooling_fault_verify_start == true && millis() - last3 < coolingFault_verify)
       {
         Serial.print("Start verify Cooling-Fault  ");
         Serial.println((millis() - last3) / 1000);
       }
-      if (millis() - last3 >= coolingfalut_verify)
+      if (millis() - last3 >= coolingFault_verify)
       {
         bool newCoolingFault = true;
-        if (newCoolingFault != cooling_falut)
+        if (newCoolingFault != cooling_fault)
         {
           Serial.println("Cooling System Fault !");
-          cooling_falut = newCoolingFault;
+          cooling_fault = newCoolingFault;
           showDisplay = true;
           buzzerAlarmON = true;
           page = 0;
         }
-        cooling_fault();
+        coolingFault();
       }
     }
   }
@@ -825,10 +824,10 @@ void readCoolSys()
   {
     last2 = 0;
     last3 = 0;
-    cooling_falut = false;
+    cooling_fault = false;
     cooling_fault_verify_start = false;
     silence_alarm = false;
-    buzzerAlarmON = false;
+    //buzzerAlarmON = false;
 
     showDisplay = true;
     page = 1;
@@ -993,7 +992,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay);
+    lcd.print(coolingFault_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -1018,7 +1017,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay);
+    lcd.print(coolingFault_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -1041,7 +1040,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(">Cool'F Delay:");
-    lcd.print(coolingfalut_delay);
+    lcd.print(coolingFault_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
@@ -1064,7 +1063,7 @@ void updateMenu()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay);
+    lcd.print(coolingFault_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(">Sleep Mode:");
@@ -1411,7 +1410,7 @@ void setCoolFault_delay()
   lcd.setCursor(0, 0);
   lcd.print(" Cooling Fault Delay");
   lcd.setCursor(6, 2);
-  lcd.print(coolingfalut_delay);
+  lcd.print(coolingFault_delay);
   lcd.print(" Second");
 
   delay(1000);
@@ -1420,16 +1419,16 @@ void setCoolFault_delay()
     if (!digitalRead(UP_BUTTON))
     {
       beep();
-      coolingfalut_delay = coolingfalut_delay + 1;
-      if (coolingfalut_delay > 60)
+      coolingFault_delay = coolingFault_delay + 1;
+      if (coolingFault_delay > 60)
       {
-        coolingfalut_delay = 0;
+        coolingFault_delay = 0;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Cooling Fault Delay");
       lcd.setCursor(6, 2);
-      lcd.print(coolingfalut_delay);
+      lcd.print(coolingFault_delay);
       lcd.print(" Second");
       delay(200);
       while (!digitalRead(UP_BUTTON))
@@ -1438,16 +1437,16 @@ void setCoolFault_delay()
     if (!digitalRead(DOWN_BUTTON))
     {
       beep();
-      coolingfalut_delay = coolingfalut_delay - 1;
-      if (coolingfalut_delay < 0)
+      coolingFault_delay = coolingFault_delay - 1;
+      if (coolingFault_delay < 0)
       {
-        coolingfalut_delay = 60;
+        coolingFault_delay = 60;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Cooling Fault Delay");
       lcd.setCursor(6, 2);
-      lcd.print(coolingfalut_delay);
+      lcd.print(coolingFault_delay);
       lcd.print(" Second");
       delay(200);
       while (!digitalRead(DOWN_BUTTON))
@@ -1456,7 +1455,7 @@ void setCoolFault_delay()
     if (!digitalRead(MODE_BUTTON))
     {
       beep();
-      EEPROM.put(20, coolingfalut_delay);
+      EEPROM.put(20, coolingFault_delay);
       break;
       while (!digitalRead(MODE_BUTTON))
         ;
@@ -2154,7 +2153,7 @@ void page1()
       lcd.setCursor(14, 2);
       lcd.print("LOW");
     }
-    if (cooling_falut == true && engineRun == true)
+    if (cooling_fault == true && engineRun == true)
     {
       lcd.setCursor(14, 2);
       lcd.print("FAULT");
@@ -2293,7 +2292,7 @@ void page4()
     lcd.print((char)223);
     lcd.setCursor(0, 2);
     lcd.print(" Cool'F Delay:");
-    lcd.print(coolingfalut_delay);
+    lcd.print(coolingFault_delay);
     lcd.print(" S.");
     lcd.setCursor(0, 3);
     lcd.print(" Sleep Mode:");
