@@ -444,11 +444,12 @@ void showTimeNow()
 }
 void silenceAlarmReset()
 {
-  bool newsilenceAlarm = false;
-  if (newsilenceAlarm != silence_alarm)
-  {
-    silence_alarm = newsilenceAlarm;
-  }
+  // bool newsilenceAlarm = false;
+  // if (newsilenceAlarm != silence_alarm)
+  // {
+  //   silence_alarm = newsilenceAlarm;
+  // }
+  silence_alarm = false;
 }
 void buzzerAlarm()
 {
@@ -490,9 +491,9 @@ void oilPress_fault()
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
     lcd.setCursor(0, 2);
-    lcd.print(" OILPRESSURE FALUT  ");
+    lcd.print(" OIL PRESSURE FALUT ");
     showDisplay = false;
-    writeDataLoger("OILPRESSURE FALUT,");
+    writeDataLoger("OIL PRESSURE FALUT,");
   }
   // if (millis() - last9 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
   // {
