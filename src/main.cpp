@@ -442,14 +442,7 @@ void showTimeNow()
   Serial.print(":");
   Serial.println(now.second());
 }
-void silenceAlarmReset()
-{
-  bool newsilenceAlarm = false;
-  if (newsilenceAlarm != silence_alarm)
-  {
-    silence_alarm = newsilenceAlarm;
-  }
-}
+
 void buzzerAlarm()
 {
   if (buzzerAlarmON == true)
@@ -473,17 +466,30 @@ void buzzerAlarm()
   }
   else
   {
-    if (engineShutOff == false)
-    {
-      noTone(BUZZER_PIN);
-      digitalWrite(BELL_PIN, HIGH);
-    }
+    noTone(BUZZER_PIN);
+    digitalWrite(BELL_PIN, HIGH);
+    // if (engineShutOff == false)
+    // {
+    //   noTone(BUZZER_PIN);
+    //   digitalWrite(BELL_PIN, HIGH);
+    // }
   }
+}
+void silenceAlarmReset()
+{
+  // bool newsilenceAlarm = false;
+  // if (newsilenceAlarm != silence_alarm)
+  // {
+  //   silence_alarm = newsilenceAlarm;
+  // }
+  silence_alarm = false;
+  buzzerAlarmON = true;
+  buzzerAlarm();
 }
 void oilPressFault()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  if (showDisplay == true && silence_alarm == false)
+  if (showDisplay == true)
   {
     silenceAlarmReset();
     lcd.clear();
@@ -531,7 +537,7 @@ void oilPressFault()
 void coolingFault()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  if (showDisplay == true && silence_alarm == false)
+  if (showDisplay == true)
   {
     silenceAlarmReset();
     lcd.clear();
@@ -579,7 +585,7 @@ void coolingFault()
 void engineOverTemp()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  if (showDisplay == true && silence_alarm == false)
+  if (showDisplay == true)
   {
     silenceAlarmReset();
 
@@ -967,7 +973,7 @@ void readDisableSw()
       armedSw = newArmedSw;
       digitalWrite(LED_DISABLE, LOW);
       showDisplay = true;
-      buzzerAlarmON = false;
+      //buzzerAlarmON = false;
       writeDataLoger("SHUTOFF Enable,");
     }
   }
