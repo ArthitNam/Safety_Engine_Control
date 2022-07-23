@@ -43,6 +43,8 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
+String version = "0.9.3";  // แก้ไข Version *****
+
 int thermoDO = 4;
 int thermoCS = 5;
 int thermoCLK = 6;
@@ -62,10 +64,12 @@ unsigned long previousMillis1 = 0;
 unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
-unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6;
+unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6, last7=0, last8=0,last9;
 unsigned long waterTankFalut_verify = 15000;
+unsigned long oilPressfalut_verify = 5000;
 unsigned long coolingfalut_verify = 5000;
 unsigned long coolingfalut_delay;
+unsigned long oilPressfalut_delay = 1;
 unsigned long dimTime;
 unsigned long pageOtherTime = 60000;
 unsigned long engineRunTime;
@@ -76,6 +80,9 @@ bool engineRun = false;
 bool engineStart = false;
 bool coolSys = false;
 bool oilPress = false;
+bool oilPress_falut = false;
+bool oilPress_fault_delay_start = false;
+bool oilPress_fault_verify_start = false;
 bool waterTank = false;
 bool warning = false;
 bool cooling_falut = false;
@@ -473,6 +480,54 @@ void buzzerAlarm()
     }
   }
 }
+void oilPress_fault()
+{
+  digitalWrite(LED_YELLOW, HIGH);
+  if (showDisplay == true && silence_alarm == false)
+  {
+    silenceAlarmReset();
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("   !! WARNING !!    ");
+    lcd.setCursor(0, 2);
+    lcd.print(" OILING SYSTEM FALUT");
+    showDisplay = false;
+    writeDataLoger("Oiling System Fault,");
+  }
+  // if (millis() - last9 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
+  // {
+  //   countDown--;
+  //   Serial.println(countDown);
+  //   last9 = millis();
+  //   lcd.clear();
+  //   lcd.setCursor(0, 0);
+  //   lcd.print(" OILING SYSTEM FALUT");
+  //   lcd.setCursor(0, 2);
+  //   lcd.print(" ShutOFF Countdown !");
+  //   lcd.setCursor(7, 3);
+  //   lcd.print(countDown);
+  //   lcd.print(" Sec.");
+  // }
+  // if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
+  // {
+  //   beep();
+  //   countDown = 60;
+  // }
+  // if (countDown == 0 && engineShutOff == false)
+  // {
+  //   // Shut OFF
+  //   lcd.clear();
+  //   lcd.setCursor(0, 1);
+  //   lcd.print(" OILING SYSTEM FALUT");
+  //   lcd.setCursor(0, 2);
+  //   lcd.print(" ! ENGINE SHUTOFF ! ");
+
+  //   tone(BUZZER_PIN, 800, 0);
+  //   digitalWrite(LED_SHUTOFF, HIGH);
+  //   writeDataLoger("Engine ShutOFF,");
+  //   engineShutOff = true;
+  // }
+}
 void cooling_fault()
 {
   digitalWrite(LED_YELLOW, HIGH);
@@ -647,6 +702,63 @@ void readOilPressSw()
       showDisplay = true;
     }
   }
+  ///////////////////////
+  if (oilPress == false && engineRun == true)
+  {
+    if (oilPress_fault_delay_start == false)
+    {
+      last7 = millis();
+      oilPress_fault_delay_start = true;
+    }
+    if (oilPress_fault_delay_start == true && millis() - last7 < oilPressfalut_delay * 1000)
+    {
+      //Serial.print("Start Delay oilPress-Fault  ");
+      //Serial.println((millis() - last7) / 1000);
+    }
+
+    if (millis() - last7 > oilPressfalut_delay * 1000)
+    {
+      if (oilPress_fault_verify_start == false)
+      {
+        last8 = millis();
+        oilPress_fault_verify_start = true;
+      }
+      if (oilPress_fault_verify_start == true && millis() - last8 < oilPressfalut_verify)
+      {
+        //Serial.print("Start verify oilPress-Fault  ");
+        //Serial.println((millis() - last8) / 1000);
+      }
+      if (millis() - last8 >= oilPressfalut_verify)
+      {
+        bool newoilPressFault = true;
+        if (newoilPressFault != oilPress_falut)
+        {
+          Serial.println("oilPress System Fault !");
+          oilPress_falut = newoilPressFault;
+          showDisplay = true;
+          buzzerAlarmON = true;
+          page = 0;
+        }
+        oilPress_fault();
+      }
+    }
+  }
+  if (oilPress == false && engineRun == false && oilPress_fault_delay_start == true)
+  {
+    last7 = 0;
+    last8 = 0;
+    last9 = 0;
+    oilPress_falut = false;
+    oilPress_fault_verify_start = false;
+    silence_alarm = false;
+    buzzerAlarmON = false;
+
+    showDisplay = true;
+    page = 1;
+    oilPress_fault_delay_start = false;
+    Serial.println("oilPress true");
+  }
+  ////////////////////////////////
 }
 void readCoolSys()
 {
@@ -2509,7 +2621,8 @@ void setup()
   Serial.begin(115200);
   Serial.println("---------------------");
   Serial.println("Safety Engine Control");
-  Serial.println("Ver.  0.9.0");
+  Serial.print("Ver.  ");
+  Serial.println(version);
 
   lcd.init();
   lcd.createChar(0, engineChar0);
