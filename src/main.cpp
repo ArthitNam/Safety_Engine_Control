@@ -66,7 +66,7 @@ unsigned long currentMillis1;
 unsigned long countSec;
 unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6, last7=0, last8=0,last9;
 unsigned long waterTankFalut_verify = 15000;
-unsigned long oilPressfalut_verify = 5000;
+unsigned long oilPressfalut_verify = 10000;
 unsigned long coolingfalut_verify = 5000;
 unsigned long coolingfalut_delay;
 unsigned long oilPressfalut_delay = 1;
@@ -490,9 +490,9 @@ void oilPress_fault()
     lcd.setCursor(0, 1);
     lcd.print("   !! WARNING !!    ");
     lcd.setCursor(0, 2);
-    lcd.print(" OILING SYSTEM FALUT");
+    lcd.print(" OILPRESSURE FALUT  ");
     showDisplay = false;
-    writeDataLoger("Oiling System Fault,");
+    writeDataLoger("OILPRESSURE FALUT,");
   }
   // if (millis() - last9 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
   // {
