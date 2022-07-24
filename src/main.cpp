@@ -105,7 +105,8 @@ bool read = false;
 int count = 0;
 int buttonState = 1;
 int menu = 0;
-int countDown = 60;
+int countDownTime = 60;
+int countDown = countDownTime;
 unsigned long engineRPM;
 bool powerOff = false;
 unsigned long lastmillis = 0;
@@ -565,7 +566,7 @@ void coolingFault()
   if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
   {
     beep();
-    countDown = 60;
+    countDown = countDownTime;
   }
   if (countDown == 0 && engineShutOff == false)
   {
