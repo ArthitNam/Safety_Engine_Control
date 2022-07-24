@@ -43,7 +43,7 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
-String version = "0.9.4";  // แก้ไข Version *****
+String version = "0.9.4.1";  // แก้ไข Version *****
 
 int thermoDO = 4;
 int thermoCS = 5;
