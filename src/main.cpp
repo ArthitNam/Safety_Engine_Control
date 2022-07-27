@@ -105,7 +105,7 @@ bool read = false;
 int count = 0;
 int buttonState = 1;
 int menu = 0;
-int tempAlarm = 5;      // เตือนก่อนตัดกี่องศา
+int tempAlarm = 8;      // เตือนก่อนตัดกี่องศา
 int countDownTime = 15; // Count Down Schut Off Enngine
 int countDown = countDownTime;
 unsigned long engineRPM;
