@@ -43,7 +43,7 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
-String version = "0.9.4.1";  // แก้ไข Version *****
+String version = "0.9.4.1"; // แก้ไข Version *****
 
 int thermoDO = 4;
 int thermoCS = 5;
@@ -64,7 +64,7 @@ unsigned long previousMillis1 = 0;
 unsigned long currentMillis;
 unsigned long currentMillis1;
 unsigned long countSec;
-unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6, last7=0, last8=0,last9;
+unsigned long last1 = 0, last2 = 0, last3 = 0, last4 = 0, last5, last6, last7 = 0, last8 = 0, last9;
 unsigned long waterTankFault_verify = 15000;
 unsigned long oilPressFault_verify = 10000;
 unsigned long coolingFault_verify = 5000;
@@ -105,7 +105,7 @@ bool read = false;
 int count = 0;
 int buttonState = 1;
 int menu = 0;
-int countDownTime = 60;
+int countDownTime = 15; // Count Down Schut Off Enngine
 int countDown = countDownTime;
 unsigned long engineRPM;
 bool powerOff = false;
@@ -685,7 +685,7 @@ void readWaterTank()
     {
       waterTank = newWaterTank;
       showDisplay = true;
-      //buzzerAlarmON = false;
+      // buzzerAlarmON = false;
     }
   }
 }
@@ -719,8 +719,8 @@ void readOilPressSw()
     }
     if (oilPress_fault_delay_start == true && millis() - last7 < oilPressFault_delay * 1000)
     {
-      //Serial.print("Start Delay oilPress-Fault  ");
-      //Serial.println((millis() - last7) / 1000);
+      // Serial.print("Start Delay oilPress-Fault  ");
+      // Serial.println((millis() - last7) / 1000);
     }
 
     if (millis() - last7 > oilPressFault_delay * 1000)
@@ -732,8 +732,8 @@ void readOilPressSw()
       }
       if (oilPress_fault_verify_start == true && millis() - last8 < oilPressFault_verify)
       {
-        //Serial.print("Start verify oilPress-Fault  ");
-        //Serial.println((millis() - last8) / 1000);
+        // Serial.print("Start verify oilPress-Fault  ");
+        // Serial.println((millis() - last8) / 1000);
       }
       if (millis() - last8 >= oilPressFault_verify)
       {
@@ -758,7 +758,7 @@ void readOilPressSw()
     oilPress_fault = false;
     oilPress_fault_verify_start = false;
     silence_alarm = false;
-    //buzzerAlarmON = false;
+    // buzzerAlarmON = false;
 
     showDisplay = true;
     page = 1;
@@ -834,7 +834,7 @@ void readCoolSys()
     cooling_fault = false;
     cooling_fault_verify_start = false;
     silence_alarm = false;
-    //buzzerAlarmON = false;
+    // buzzerAlarmON = false;
 
     showDisplay = true;
     page = 1;
@@ -974,7 +974,7 @@ void readDisableSw()
       armedSw = newArmedSw;
       digitalWrite(LED_DISABLE, LOW);
       showDisplay = true;
-      //buzzerAlarmON = false;
+      // buzzerAlarmON = false;
       writeDataLoger("SHUTOFF Enable,");
     }
   }
