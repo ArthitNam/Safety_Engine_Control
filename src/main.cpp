@@ -591,7 +591,7 @@ void coolingFault()
 void engineOverTemp()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  if (showDisplay == true && buzzerAlarmON == false)
+  if (showDisplay == true)
   {
     silenceAlarmReset();
 
@@ -599,13 +599,13 @@ void engineOverTemp()
     lcd.setCursor(0, 0);
     lcd.print("! ENGINE OVER TEMP !");
     lcd.setCursor(7, 1);
-    lcd.print(temp, 1);
+    lcd.print(newTemp, 1);
     lcd.print(" C");
     lcd.print((char)223);
     writeDataLoger("Engine Over Temp,");
     showDisplay = false;
   }
-  if (temp > overTemp && engineShutOff == false)
+  if (newTemp > overTemp && engineShutOff == false)
   {
     // Shut OFF
     lcd.clear();
@@ -2412,10 +2412,11 @@ void readTemp()
         tempFault = newOverTemp;
         showDisplay = true;
         buzzerAlarmON = true;
-        last6 = millis();
-        page = 0;
-        engineOverTemp();
+        //last6 = millis();
+       
       }
+      page = 0;
+      engineOverTemp();
     }
   }
 
