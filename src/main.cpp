@@ -484,6 +484,10 @@ void silenceAlarmReset()
   // {
   //   silence_alarm = newsilenceAlarm;
   // }
+
+  displayOn();
+  displayDim = false;
+
   silence_alarm = false;
   buzzerAlarmON = true;
   buzzerAlarm();
@@ -587,7 +591,7 @@ void coolingFault()
 void engineOverTemp()
 {
   digitalWrite(LED_YELLOW, HIGH);
-  if (showDisplay == true)
+  if (showDisplay == true && buzzerAlarmON == false)
   {
     silenceAlarmReset();
 
@@ -2197,7 +2201,7 @@ void page1()
     lcd.print(" C");
     lcd.print((char)223);
   }
-  if (displayDim == false && millis() - last4 >= (dimTime * 60000))
+  if (displayDim == false && millis() - last4 >= (dimTime * 60000) && engineRun == false)
   {
     displayOff();
     displayDim = true;
@@ -2409,9 +2413,9 @@ void readTemp()
         showDisplay = true;
         buzzerAlarmON = true;
         last6 = millis();
+        page = 0;
+        engineOverTemp();
       }
-      page = 0;
-      engineOverTemp();
     }
   }
 
