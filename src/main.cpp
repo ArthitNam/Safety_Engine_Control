@@ -601,31 +601,7 @@ void engineOverTemp()
     writeDataLoger("Engine Over Temp,");
     showDisplay = false;
   }
-  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW) && temp > overTemp)
-  {
-
-    countDown--;
-    Serial.println(countDown);
-    last6 = millis();
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("! ENGINE OVER TEMP !");
-    lcd.setCursor(7, 1);
-    lcd.print(temp, 1);
-    lcd.print(" C");
-    lcd.print((char)223);
-    lcd.setCursor(0, 2);
-    lcd.print(" ShutOFF Countdown  ");
-    lcd.setCursor(7, 3);
-    lcd.print(countDown);
-    lcd.print(" Sec.");
-  }
-  if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
-  {
-    beep();
-    countDown = countDownTime;
-  }
-  if (countDown == 0 && engineShutOff == false)
+  if (temp > overTemp && engineShutOff == false)
   {
     // Shut OFF
     lcd.clear();
@@ -640,6 +616,46 @@ void engineOverTemp()
     writeDataLoger("Engine ShutOFF,");
     engineShutOff = true;
   }
+
+  // if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW) && temp > overTemp)
+  // {
+
+  //   countDown--;
+  //   Serial.println(countDown);
+  //   last6 = millis();
+  //   lcd.clear();
+  //   lcd.setCursor(0, 0);
+  //   lcd.print("! ENGINE OVER TEMP !");
+  //   lcd.setCursor(7, 1);
+  //   lcd.print(temp, 1);
+  //   lcd.print(" C");
+  //   lcd.print((char)223);
+  //   lcd.setCursor(0, 2);
+  //   lcd.print(" ShutOFF Countdown  ");
+  //   lcd.setCursor(7, 3);
+  //   lcd.print(countDown);
+  //   lcd.print(" Sec.");
+  // }
+  // if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
+  // {
+  //   beep();
+  //   countDown = countDownTime;
+  // }
+  // if (countDown == 0 && engineShutOff == false)
+  // {
+  //   // Shut OFF
+  //   lcd.clear();
+  //   lcd.setCursor(0, 1);
+  //   lcd.print("     OVER  TEMP     ");
+  //   lcd.setCursor(0, 2);
+  //   lcd.print(" ! ENGINE SHUTOFF ! ");
+  //   tone(BUZZER_PIN, 800, 0);
+  //   digitalWrite(BELL_PIN, HIGH);
+  //   digitalWrite(LED_SHUTOFF, HIGH);
+  //   digitalWrite(ENGINE_RELAY_SHUTOFF, LOW);
+  //   writeDataLoger("Engine ShutOFF,");
+  //   engineShutOff = true;
+  // }
 }
 void waterTank_fault()
 {
