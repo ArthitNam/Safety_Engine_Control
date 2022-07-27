@@ -43,7 +43,7 @@
 #define SILENCE_ALARM_BUTTON 9
 #define DISABLE_SW 11
 
-String version = "0.9.4.1"; // แก้ไข Version *****
+String version = "0.9.5"; // แก้ไข Version *****
 
 int thermoDO = 4;
 int thermoCS = 5;
@@ -105,6 +105,7 @@ bool read = false;
 int count = 0;
 int buttonState = 1;
 int menu = 0;
+int tempAlarm = 5;      // เตือนก่อนตัดกี่องศา
 int countDownTime = 15; // Count Down Schut Off Enngine
 int countDown = countDownTime;
 unsigned long engineRPM;
@@ -549,39 +550,39 @@ void coolingFault()
     showDisplay = false;
     writeDataLoger("Cooling System Fault,");
   }
-  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW) && temp >= overTemp)
-  {
-    countDown--;
-    Serial.println(countDown);
-    last6 = millis();
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("COOLING SYSTEM FAULT");
-    lcd.setCursor(0, 2);
-    lcd.print(" ShutOFF Countdown !");
-    lcd.setCursor(7, 3);
-    lcd.print(countDown);
-    lcd.print(" Sec.");
-  }
-  if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
-  {
-    beep();
-    countDown = countDownTime;
-  }
-  if (countDown == 0 && engineShutOff == false)
-  {
-    // Shut OFF
-    lcd.clear();
-    lcd.setCursor(0, 1);
-    lcd.print("COOLING SYSTEM FAULT");
-    lcd.setCursor(0, 2);
-    lcd.print(" ! ENGINE SHUTOFF ! ");
+  // if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW) && temp >= overTemp)
+  // {
+  //   countDown--;
+  //   Serial.println(countDown);
+  //   last6 = millis();
+  //   lcd.clear();
+  //   lcd.setCursor(0, 0);
+  //   lcd.print("COOLING SYSTEM FAULT");
+  //   lcd.setCursor(0, 2);
+  //   lcd.print(" ShutOFF Countdown !");
+  //   lcd.setCursor(7, 3);
+  //   lcd.print(countDown);
+  //   lcd.print(" Sec.");
+  // }
+  // if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
+  // {
+  //   beep();
+  //   countDown = countDownTime;
+  // }
+  // if (countDown == 0 && engineShutOff == false)
+  // {
+  //   // Shut OFF
+  //   lcd.clear();
+  //   lcd.setCursor(0, 1);
+  //   lcd.print("COOLING SYSTEM FAULT");
+  //   lcd.setCursor(0, 2);
+  //   lcd.print(" ! ENGINE SHUTOFF ! ");
 
-    tone(BUZZER_PIN, 800, 0);
-    digitalWrite(LED_SHUTOFF, HIGH);
-    writeDataLoger("Engine ShutOFF,");
-    engineShutOff = true;
-  }
+  //   tone(BUZZER_PIN, 800, 0);
+  //   digitalWrite(LED_SHUTOFF, HIGH);
+  //   writeDataLoger("Engine ShutOFF,");
+  //   engineShutOff = true;
+  // }
 }
 void engineOverTemp()
 {
@@ -600,7 +601,7 @@ void engineOverTemp()
     writeDataLoger("Engine Over Temp,");
     showDisplay = false;
   }
-  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW))
+  if (millis() - last6 >= 1000 && countDown > 0 && armedSw == false && (digitalRead(ABORT_BUTTON) != LOW) && temp > overTemp)
   {
 
     countDown--;
@@ -622,7 +623,7 @@ void engineOverTemp()
   if (digitalRead(ABORT_BUTTON) == LOW && engineShutOff == false)
   {
     beep();
-    countDown = 60;
+    countDown = countDownTime;
   }
   if (countDown == 0 && engineShutOff == false)
   {
@@ -2383,7 +2384,7 @@ void readTemp()
     // {
     //   temp = 0;
     // }
-    if (temp >= overTemp)
+    if (temp >= (overTemp - tempAlarm))
     {
       bool newOverTemp = true;
       if (newOverTemp != tempFault)
