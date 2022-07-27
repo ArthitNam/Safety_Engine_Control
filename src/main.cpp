@@ -2404,7 +2404,7 @@ void readTemp()
     // {
     //   temp = 0;
     // }
-    if (temp >= (overTemp - tempAlarm))
+    if (newTemp >= (overTemp - tempAlarm))
     {
       bool newOverTemp = true;
       if (newOverTemp != tempFault)
