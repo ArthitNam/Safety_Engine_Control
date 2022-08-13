@@ -342,7 +342,7 @@ void readEeprom()
   {
     dimTime = 15;
   }
-  if (engineRPM < 2 || engineRPM > 30)
+  if (engineRPM < 2 || engineRPM > 300)
   {
     engineRPM = 3;
   }
@@ -1569,7 +1569,7 @@ void setEngineRpm()
     {
       beep();
       engineRPM = engineRPM + 1;
-      if (engineRPM > 30)
+      if (engineRPM > 300)
       {
         engineRPM = 2;
       }
@@ -1589,7 +1589,7 @@ void setEngineRpm()
       engineRPM = engineRPM - 1;
       if (engineRPM < 2)
       {
-        engineRPM = 30;
+        engineRPM = 300;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
