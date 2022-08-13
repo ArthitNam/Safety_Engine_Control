@@ -34,6 +34,7 @@
 #define BUZZER_PIN 17
 #define BELL_PIN 42
 #define ENGINE_RELAY_SHUTOFF 43
+#define ENGINE_RELAY_ON 46
 // Button
 #define RESET_BUTTON 36
 #define UP_BUTTON 38
@@ -917,6 +918,7 @@ void checkEngineRun()
       engineStart = true;
       engineRun = true;
       writeDataLoger("Eneing RUN,");
+      digitalWrite(ENGINE_RELAY_ON, HIGH);
       if (displayDim == true)
       {
         displayOn();
@@ -934,6 +936,7 @@ void checkEngineRun()
       engineRun = false;
       writeDataLoger("Eneing Stop,");
       showDisplay = true;
+      digitalWrite(ENGINE_RELAY_ON, LOW);
     }
   }
   currentMillis1 = millis();
@@ -2640,6 +2643,7 @@ void setup()
   pinMode(BUZZER_PIN, OUTPUT);           // Buzzer Alarm
   pinMode(BELL_PIN, OUTPUT);             // Bell Alarm
   pinMode(ENGINE_RELAY_SHUTOFF, OUTPUT); // Relay ShutOFF
+  pinMode(ENGINE_RELAY_ON, OUTPUT);      // Relay Engine ON
 
   pinMode(chipSelect, OUTPUT);
   analogReference(INTERNAL1V1);                                    // เลือกใช้แรงดันอ้างอิงจากภายใน 1.1V
@@ -2647,6 +2651,7 @@ void setup()
 
   digitalWrite(BELL_PIN, HIGH);
   digitalWrite(ENGINE_RELAY_SHUTOFF, HIGH);
+  digitalWrite(ENGINE_RELAY_ON, LOW);
   Serial.begin(115200);
   Serial.println("---------------------");
   Serial.println("Safety Engine Control");
