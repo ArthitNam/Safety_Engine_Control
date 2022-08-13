@@ -109,7 +109,7 @@ int menu = 0;
 int tempAlarm = 8;      // เตือนก่อนตัดกี่องศา
 int countDownTime = 15; // Count Down Schut Off Enngine
 int countDown = countDownTime;
-unsigned long engineRPM;
+unsigned int engineRPM;
 bool powerOff = false;
 unsigned long lastmillis = 0;
 bool changePasswordDone = false;
