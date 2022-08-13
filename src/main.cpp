@@ -606,7 +606,7 @@ void engineOverTemp()
     writeDataLoger("Engine Over Temp,");
     showDisplay = false;
   }
-  if (newTemp > overTemp && engineShutOff == false)
+  if (newTemp > overTemp && engineShutOff == false && armedSw == false)
   {
     // Shut OFF
     lcd.clear();
