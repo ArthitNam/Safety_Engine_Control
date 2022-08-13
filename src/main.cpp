@@ -109,7 +109,7 @@ int menu = 0;
 int tempAlarm = 8;      // เตือนก่อนตัดกี่องศา
 int countDownTime = 15; // Count Down Schut Off Enngine
 int countDown = countDownTime;
-unsigned int engineRPM;
+int engineRPM;
 bool powerOff = false;
 unsigned long lastmillis = 0;
 bool changePasswordDone = false;
@@ -342,9 +342,9 @@ void readEeprom()
   {
     dimTime = 15;
   }
-  if (engineRPM < 200 || engineRPM > 20000)
+  if (engineRPM < 2 || engineRPM > 30)
   {
-    engineRPM = 3000;
+    engineRPM = 3;
   }
   if (passwd == "" || passwd.length() != 4)
   {
@@ -369,7 +369,7 @@ void readEeprom()
   Serial.print(dimTime);
   Serial.println(" M.");
   Serial.print("ENGINE RPM Start = ");
-  Serial.println(engineRPM);
+  Serial.println(engineRPM*100);
   Serial.print("Password = ");
   Serial.println(passwd);
   Serial.print("NoBeep Button = ");
@@ -910,7 +910,7 @@ void checkEngineRun()
     Serial.println(average);
     lastmillis = millis(); // Update lastmillis
   }
-  if (RPM >= engineRPM)
+  if (RPM >= (engineRPM*100))
   {
     bool newEngineRun = true;
     if (newEngineRun != engineRun)
@@ -928,7 +928,7 @@ void checkEngineRun()
       showDisplay = true;
     }
   }
-  if (RPM < engineRPM)
+  if (RPM < (engineRPM*100))
   {
     bool newEngineRun = false;
     if (newEngineRun != engineRun)
@@ -1115,7 +1115,7 @@ void updateMenu()
     lcd.write(0);
     lcd.write(1);
     lcd.print(" Start: ");
-    lcd.print(engineRPM);
+    lcd.print(engineRPM*100);
     lcd.print(" RPM");
     lcd.setCursor(0, 2);
     lcd.print(" History");
@@ -1136,7 +1136,7 @@ void updateMenu()
     lcd.write(0);
     lcd.write(1);
     lcd.print(" Start: ");
-    lcd.print(engineRPM);
+    lcd.print(engineRPM*100);
     lcd.print(" RPM");
     lcd.setCursor(0, 2);
     lcd.print(">History");
@@ -1157,7 +1157,7 @@ void updateMenu()
     lcd.write(0);
     lcd.write(1);
     lcd.print(" Start: ");
-    lcd.print(engineRPM);
+    lcd.print(engineRPM*100);
     lcd.print(" RPM");
     lcd.setCursor(0, 2);
     lcd.print(" History");
@@ -1559,7 +1559,7 @@ void setEngineRpm()
   lcd.setCursor(0, 0);
   lcd.print(" Engine Start (RMP) ");
   lcd.setCursor(8, 2);
-  lcd.print(engineRPM);
+  lcd.print(engineRPM*100);
   lcd.print(" RPM");
 
   delay(1000);
@@ -1568,16 +1568,16 @@ void setEngineRpm()
     if (!digitalRead(UP_BUTTON))
     {
       beep();
-      engineRPM = engineRPM + 100;
-      if (engineRPM > 30000)
+      engineRPM = engineRPM + 1;
+      if (engineRPM > 30)
       {
-        engineRPM = 500;
+        engineRPM = 2;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Engine Start (RMP) ");
       lcd.setCursor(8, 2);
-      lcd.print(engineRPM);
+      lcd.print(engineRPM*100);
       lcd.print(" RPM");
       delay(200);
       while (!digitalRead(UP_BUTTON))
@@ -1586,16 +1586,16 @@ void setEngineRpm()
     if (!digitalRead(DOWN_BUTTON))
     {
       beep();
-      engineRPM = engineRPM - 100;
-      if (engineRPM < 500)
+      engineRPM = engineRPM - 1;
+      if (engineRPM < 2)
       {
-        engineRPM = 30000;
+        engineRPM = 30;
       }
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print(" Engine Start (RMP) ");
       lcd.setCursor(8, 2);
-      lcd.print(engineRPM);
+      lcd.print(engineRPM)*100;
       lcd.print(" RPM");
 
       delay(200);
